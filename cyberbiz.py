@@ -10,22 +10,23 @@ import os
 app = Flask(__name__)
 
 @app.route("/")
-def health():
-    return "OK", 200
+def home():
+    return "Webhook server running"
 
 @app.route("/webhook/cyberbiz/order", methods=["POST"])
-def webhook():
-    data = request.get_json(silent=True)
-    print("WEBHOOK:", data)
-    return jsonify({"status":"ok"}), 200
+def cyberbiz_order():
+
+    data = request.json
+    print("Webhook received:", data)
+
+    return jsonify({
+        "status": "ok"
+    })
 
 
-
-
-
-
-
-
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
 
 
 '''
