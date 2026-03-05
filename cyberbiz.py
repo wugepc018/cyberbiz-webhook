@@ -4,7 +4,31 @@ import os
 import requests
 import hmac
 import hashlib
+from flask import Flask, request, jsonify
+import os
 
+app = Flask(__name__)
+
+@app.route("/")
+def health():
+    return "OK", 200
+
+@app.route("/webhook/cyberbiz/order", methods=["POST"])
+def webhook():
+    data = request.get_json(silent=True)
+    print("WEBHOOK:", data)
+    return jsonify({"status":"ok"}), 200
+
+
+
+
+
+
+
+
+
+
+'''
 APP_SECRET=os.getenv("CYBERBIZ_APP_SECRET")
 
 if not APP_SECRET:
@@ -39,10 +63,10 @@ def test():
     return {"server":"running"}
 @app.route("/webhook/cyberbiz/order", methods=["POST"])
 def cyberbiz_order():
-    '''
+    
     if not verify_signature(request):
         return "invalid signature", 403
-        '''
+        
     try:
         data = request.get_json(silent=True)
         print("WEBHOOK DATA:", data)
@@ -78,4 +102,4 @@ if __name__ == "__main__":
     
    
   
-
+'''
