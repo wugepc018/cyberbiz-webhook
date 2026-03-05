@@ -31,14 +31,24 @@ RSP_SUBSCRIBE_API = f"{RSP_BASE_URL}/openapi/esim/plan/subscribe"
 @app.route("/")
 def health():
     return "OK", 200
-
+@app.route("/test")
+def test():
+    return {"server":"running"}
 @app.route("/webhook/cyberbiz/order", methods=["POST"])
 def cyberbiz_order():
+    '''
     if not verify_signature(request):
         return "invalid signature", 403
-    data = request.get_json(silent=True)
-    print(data)  
-    return "ok", 200
+        '''
+    try:
+        data = request.get_json(silent=True)
+        print("WEBHOOK DATA:", data)
+
+        return {"status": "ok"}, 200
+
+    except Exception as e:
+        print("ERROR:", str(e))
+        return {"error": str(e)}, 500
 
 @app.route("/order/esim", methods=["POST"])
 def order_esim():
