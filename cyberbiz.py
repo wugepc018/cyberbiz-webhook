@@ -17,8 +17,8 @@ def home():
 def cyberbiz_order():
 
     data = request.json
-    print("Webhook received:", data)
-
+    print("Webhook received:")
+    print(json.dumps(data, indent=2, ensure_ascii=False))
     return jsonify({
         "status": "ok"
     })
