@@ -1,1 +1,1 @@
-web: gunicorn cyberbiz:app
+web: gunicorn cyberbiz:app --bind 0.0.0.0:$PORT
