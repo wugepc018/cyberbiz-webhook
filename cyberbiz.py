@@ -27,7 +27,10 @@ app = Flask(__name__)
 RSP_BASE_URL="https://cyberbiz-webhook-production.up.railway.app"
 RSP_SUBSCRIBE_API = f"{RSP_BASE_URL}/openapi/esim/plan/subscribe"
 
-
+@app.errorhandler(Exception)
+def handle_exception(e):
+    print("SERVER ERROR:", str(e))
+    return {"error": str(e)}, 500
 @app.route("/")
 def health():
     return "OK", 200
