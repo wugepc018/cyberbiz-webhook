@@ -6,8 +6,9 @@ import hmac
 import hashlib
 
 APP_SECRET=os.getenv("CYBERBIZ_APP_SECRET")
+
 if not APP_SECRET:
-    raise ValueError("CYBERBIZ_APP_SECRET not set")
+    print("WARNING: CYBERBIZ_APP_SECRET not set")
 def verify_signature(request):
     signature = request.headers.get("X-Cyberbiz-Signature")
     if not signature:
@@ -23,7 +24,7 @@ def verify_signature(request):
     return hmac.compare_digest(computed, signature)
 
 app = Flask(__name__)
-RSP_BASE_URL="cyberbiz-webhook-production.up.railway.app"
+RSP_BASE_URL="https://cyberbiz-webhook-production.up.railway.app"
 RSP_SUBSCRIBE_API = f"{RSP_BASE_URL}/openapi/esim/plan/subscribe"
 
 
