@@ -6,10 +6,15 @@ import hmac
 import hashlib
 from flask import Flask, request, jsonify
 import sqlite3
+import os
+
+if os.path.exists("orders.db"):
+    os.remove("orders.db")
+
+AUTO_VENDOR = ["AUTO001", "AUTO002"]
 def init_db():
     conn = sqlite3.connect("orders.db")
     cursor = conn.cursor()
-
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS orders (
     order_id TEXT,
@@ -18,12 +23,10 @@ def init_db():
     email TEXT,
     status TEXT,
     qrcode TEXT,
+    qc TEXT
     )
     """)
-    try:
-        cursor.execute("ALTER TABLE orders ADD COLUMN qc TEXT")
-    except sqlite3.OperationalError:
-        pass
+    
     conn.commit()
     conn.close()
 init_db()
@@ -40,21 +43,25 @@ def cyberbiz_order():
     data = request.json
     print("Webhook received:")
     print(json.dumps(data, indent=2, ensure_ascii=False))
+    
     email = data.get("customer", {}).get("email")
     order_id = data.get("order_number")
+    
     print("Order ID:", order_id)
     print(f"客戶email: {email}")
     
+    conn=sqlite3.connect("orders.db")
+    cursor=conn.cursor()
     line_items = data.get("line_items", [])
+    
     for item in line_items:
         qc=item.get("qc")
-        if qc=="AUTO001":
+        if qc in AUTO_VENDOR:
+            
             product_id=item.get("product_id")
             print("Product ID:", product_id)
             print("廠商編號:", qc)
             
-            conn=sqlite3.connect("orders.db")
-            cursor=conn.cursor()
             cursor.execute(
                 "INSERT INTO orders (order_id,email,product_id,qc,status) VALUES (?,?,?,?,?)",
                 (order_id, email, product_id, qc, "pending")
@@ -62,6 +69,7 @@ def cyberbiz_order():
             
         else:
             print("需要人工處理")
+            
     conn.commit()
     conn.close()
     
