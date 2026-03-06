@@ -8,13 +8,11 @@ from flask import Flask, request, jsonify
 import sqlite3
 import os
 
-if os.path.exists("orders.db"):
-    os.remove("orders.db")
-
 AUTO_VENDOR = ["AUTO001", "AUTO002"]
 def init_db():
     conn = sqlite3.connect("orders.db")
     cursor = conn.cursor()
+    cursor.execute("DROP TABLE IF EXISTS orders")
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS orders (
     order_id TEXT,
