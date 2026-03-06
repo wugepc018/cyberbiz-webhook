@@ -57,7 +57,7 @@ def cyberbiz_order():
             cursor=conn.cursor()
             cursor.execute(
                 "INSERT INTO orders (order_id,email,product_id,qc,status) VALUES (?,?,?,?,?)",
-                (order_id,email, product_id,qc,"pending")
+                (order_id, email, product_id, qc, "pending")
             )
             
         else:
