@@ -18,10 +18,12 @@ def init_db():
     email TEXT,
     status TEXT,
     qrcode TEXT,
-    qc TEXT
     )
     """)
-
+    try:
+        cursor.execute("ALTER TABLE orders ADD COLUMN qc TEXT")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 init_db()
