@@ -12,13 +12,13 @@ def init_db():
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS orders (
-        order_id TEXT,
-        product_id TEXT,
-        trans_id TEXT,
-        email TEXT,
-        status TEXT,
-        qrcode TEXT,
-        qa TEXT
+    order_id TEXT,
+    product_id TEXT,
+    trans_id TEXT,
+    email TEXT,
+    status TEXT,
+    qrcode TEXT,
+    qc TEXT
     )
     """)
 
@@ -45,25 +45,28 @@ def cyberbiz_order():
     
     line_items = data.get("line_items", [])
     for item in line_items:
-        product_id=item.get("product_id")
         qc=item.get("qc")
-        print("Product ID:", product_id)
-        print("廠商編號:", qc)
-        
-    conn=sqlite3.connect("orders.db")
-    cursor=conn.cursor()
-    cursor.execute(
-        "INSERT INTO orders (order_id,email,product_id,qc,status) VALUES (?,?,?,?)",
-        (order_id,email, product_id,qc,"pending")
-    )
+        if qc=="AUTO001":
+            product_id=item.get("product_id")
+            print("Product ID:", product_id)
+            print("廠商編號:", qc)
+            
+            conn=sqlite3.connect("orders.db")
+            cursor=conn.cursor()
+            cursor.execute(
+                "INSERT INTO orders (order_id,email,product_id,qc,status) VALUES (?,?,?,?,?)",
+                (order_id,email, product_id,qc,"pending")
+            )
+            
+        else:
+            print("需要人工處理")
     conn.commit()
     conn.close()
     
     return jsonify({
         "status": "ok",
     })
-    
-    
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
