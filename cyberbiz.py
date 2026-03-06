@@ -5,8 +5,6 @@ import requests
 import hmac
 import hashlib
 from flask import Flask, request, jsonify
-import os
-from fastapi import FastAPI
 import sqlite3
 def init_db():
     conn = sqlite3.connect("orders.db")
