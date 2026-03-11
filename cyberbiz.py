@@ -15,6 +15,8 @@ from email.mime.image import MIMEImage
 from email.mime.application import MIMEApplication
 from PIL import Image, ImageDraw, ImageFont
 import logging
+import time
+import uuid
 
 #LOG_PATH = "/root/app/cyberbiz-webhook/logs/webhook.log"
 logging.basicConfig(
@@ -23,6 +25,8 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 AUTO_VENDOR = ["AUTO001", "AUTO002"]
+APP_ID = "xtH7XEyey9Mv"
+APP_SECRET = "ECA021C324614BBC9CDE22BC3BC805AB"
 def init_db():
     conn = sqlite3.connect("orders.db")
     cursor = conn.cursor()
@@ -81,7 +85,7 @@ def cyberbiz_order():
             logging.info(f"產品類型: {variant_title}")
             logging.info(f"產品代號: {sku}")
             cursor.execute(
-                "INSERT INTO orders (order_id, PlanCode , email,product_id,qc,status, Title) VALUES (?,?,?,?,?,?)",
+                "INSERT INTO orders (order_id, PlanCode , email,product_id,qc,status, Title) VALUES (?,?,?,?,?,?,?)",
                 (order_id, sku, email, product_id, qc, "pending",title)
             )
             order_esim(order_id, sku, email)
@@ -101,6 +105,11 @@ def cyberbiz_order():
 Base_URL="https://neware.biz"
 def order_esim(order_id,planCode,email):
     RSP_SUBSCRIBE_API=f"{Base_URL}/openapi/esim/plan/subscribe"
+    trans_id = str(uuid.uuid4()).replace("-", "")[:20]
+    timestamp = str(int(time.time() * 1000))  
+    raw = APP_ID + trans_id + timestamp + APP_SECRET
+    ciphertext = hashlib.md5(raw.encode()).hexdigest()
+    
     conn = sqlite3.connect("orders.db")
     cursor = conn.cursor()
     cursor.execute(
@@ -116,6 +125,10 @@ def order_esim(order_id,planCode,email):
     }
     headers = {
         "Content-Type": "application/json",
+        "AppId": APP_ID,
+        "TransId": trans_id,
+        "Timestamp": timestamp,
+        "Ciphertext": ciphertext
     }
     try:
         response=requests.post(RSP_SUBSCRIBE_API,json=payload,headers=headers,timeout=10)
@@ -175,7 +188,7 @@ def notify_esim():
     email, title, order_id = row
 
     cursor.execute(
-        "UPDATE orders SET status='completed, qrcode= ? WHERE order_id = ? AND status = 'processing'",
+        "UPDATE orders SET status='completed', qrcode= ? WHERE order_id = ? AND status = 'processing'",
         (qrcode_url, order_id)
     )
 
