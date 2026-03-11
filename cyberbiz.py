@@ -14,8 +14,8 @@ from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 from email.mime.application import MIMEApplication
 from PIL import Image, ImageDraw, ImageFont
-
 import logging
+
 #LOG_PATH = "/root/app/cyberbiz-webhook/logs/webhook.log"
 logging.basicConfig(
     filename="/root/app/cyberbiz-webhook/logs/webhook.log",
@@ -31,7 +31,7 @@ def init_db():
     CREATE TABLE IF NOT EXISTS orders (
     order_id TEXT,
     product_id TEXT,
-    trans_id TEXT,
+    PlanCode TEXT,
     email TEXT,
     status TEXT,
     qrcode TEXT,
@@ -74,14 +74,17 @@ def cyberbiz_order():
         if qc in AUTO_VENDOR:
             title=item.get("title")
             product_id=item.get("product_id")
+            variant_title=item.get("variant_title")
             logging.info(f"Product ID: {product_id}")
             logging.info(f"廠商編號: {qc}")
             logging.info(f"產品名稱: {title}")
+            logging.info(f"產品類型: {variant_title}")
             logging.info(f"產品代號: {sku}")
             cursor.execute(
-                "INSERT INTO orders (order_id,email,product_id,qc,status, Title) VALUES (?,?,?,?,?,?)",
-                (order_id, email, product_id, qc, "pending",title)
+                "INSERT INTO orders (order_id, PlanCode , email,product_id,qc,status, Title) VALUES (?,?,?,?,?,?)",
+                (order_id, sku, email, product_id, qc, "pending",title)
             )
+            order_esim(order_id, sku, email)
             
         else:
             product_id=item.get("product_id")
@@ -93,6 +96,95 @@ def cyberbiz_order():
     return jsonify({
         "status": "ok",
     })
+    
+#訂購esim
+Base_URL="https://neware.biz"
+def order_esim(order_id,planCode,email):
+    RSP_SUBSCRIBE_API=f"{Base_URL}/openapi/esim/plan/subscribe"
+    conn = sqlite3.connect("orders.db")
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE orders SET status = 'processing' WHERE order_id = ? AND PlanCode = ? AND status = 'pending'",
+        (order_id, planCode)
+    )
+    conn.commit()
+    conn.close()
+    payload = {
+        "planCode": planCode,
+        "qrcodeType": 0,
+        "email": email
+    }
+    headers = {
+        "Content-Type": "application/json",
+    }
+    try:
+        response=requests.post(RSP_SUBSCRIBE_API,json=payload,headers=headers,timeout=10)
+        if response.json().get("code")=="000":
+            return jsonify({
+            "message": "Order esim Request Send Success"
+                }), 200 
+        else:
+            return jsonify({
+            "message":  "Order esim Request Send Failed"
+                }), 400 
+    except Exception as e:
+        logging.error(f"呼叫供應商API失敗: {e}")
+        
+@app.route("/notify/esim/plan/subscribe", methods=["POST"])
+def notify_esim():
+    data=request.json
+    logging.info("eSIM訂購通知收到:")
+    logging.info(json.dumps(data, indent=2, ensure_ascii=False))
+    trans_id=data.get("transId")
+    result_code=data.get("resultCode")
+    if result_code!="000":
+        logging.error(f"trans_id{trans_id} 訂購失敗：{data.get('mesg')}")
+        return jsonify({"msg":"system error"})
+    
+    esim_data=data.get("data", {})
+    cid= esim_data.get("cid")
+    qrcode_type = esim_data.get("qrcodeType")
+    qrcode = esim_data.get("qrcode")
+    plan_code = esim_data.get("planCode")
+    
+    logging.info(f"transId: {trans_id}")
+    logging.info(f"CID: {cid}")
+    logging.info(f"qrcodeType: {qrcode_type}")
+    logging.info(f"qrcode: {qrcode}")
+    logging.info(f"transId: {trans_id}, CID: {cid}, planCode: {plan_code}")
+    if qrcode_type == 1:
+        # LPA 字串，用 qrserver 產生 QR Code 圖片
+        qrcode_url = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={qrcode}"
+    else:
+        qrcode_url = qrcode
+    
+    conn = sqlite3.connect("orders.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT email, Title, order_id 
+        FROM orders 
+        WHERE PlanCode = ? AND status = 'processing'
+        ORDER BY rowid ASC
+        LIMIT 1
+    """, (plan_code,))
+    
+    row = cursor.fetchone()
+    if not row:
+        logging.error(f"找不到 plan_code {plan_code} 對應的訂單")
+        return jsonify({"code": "999", "mesg": "Failed"})
+    email, title, order_id = row
+
+    cursor.execute(
+        "UPDATE orders SET status='completed, qrcode= ? WHERE order_id = ? AND status = 'processing'",
+        (qrcode_url, order_id)
+    )
+
+    conn.commit()
+    conn.close()
+    
+    logging.info("訂購esim成功")
+    send_order_email(email,qrcode,cid,title)
+    return jsonify({"code": "000", "mesg": "success"})
     
 def add_text_to_QRcode(qrcode_url, cid, product_name):
     qr_img_data, _ = urllib.request.urlretrieve(qrcode_url)
@@ -121,13 +213,10 @@ def add_text_to_QRcode(qrcode_url, cid, product_name):
     img_byte.seek(0)
     
     return img_byte.read()
-def send_order_email():
-    cid = "89886900000000952131" #之後從API拿
-    cid_list = ["89886900000000952131","89886900000000952131","89886900000000952131"]
-    product_name = "日本 5日每日2GB*2" #之後從API拿
+def send_order_email(to_email,qrcode_url,cid,product_name):
+    cid_list=[f"cid"]
     from_email = "carrine0976@gmail.com"
     app_password = "kdws jamt mhue hmxc"
-    to_email="carrine0976@ymail.com"
     qrcode_url = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=HelloTest" #response["data"]["qrcode"]
     pdf_path = "/Users/user/Documents/GitHub/Automation_JOB/cyberbiz-webhook/2026年版 ESIM 設定.pdf"
     '''
@@ -210,6 +299,12 @@ def test_email():
     send_order_email()
     return "Email sent test"
 #send_order_email(to_email,"ORD123456", "https://example.com/qrcode.png")
+
+@app.route("/test-order-esim")
+def test_order_esim():
+    order_esim("TEST001", "PC10000000100090", "carrine0976@ymail.com")
+    return "order_esim triggered"
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=True)
