@@ -235,7 +235,7 @@ def send_order_email(to_email,qrcode_url,cid,product_name):
     from_email = "carrine0976@gmail.com"
     app_password = "kdws jamt mhue hmxc"
     qrcode_url = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=HelloTest" #response["data"]["qrcode"]
-    pdf_path = "/Users/user/Documents/GitHub/Automation_JOB/cyberbiz-webhook/2026年版 ESIM 設定.pdf"
+    pdf_path = "/root/app/cyberbiz-webhook/2026年版 ESIM 設定.pdf"
     '''
     conn=sqlite3.connect("orders.db")
     cursor=conn.cursor()
