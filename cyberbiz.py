@@ -59,7 +59,6 @@ def cyberbiz_order():
 
     data = request.json
     logging.info("Webhook received:")
-    print(data)
     logging.info(json.dumps(data, indent=2, ensure_ascii=False))
     
     email = data.get("customer", {}).get("email")
@@ -305,7 +304,7 @@ def send_order_email(to_email,qrcode_url,cid,product_name):
         server.quit()
         
     except Exception as e:
-        print(f"Send email failed: {e}")
+        logging.info(f"Send email failed: {e}")
 
 @app.route("/test-email")
 def test_email():
