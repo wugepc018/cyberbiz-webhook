@@ -34,6 +34,7 @@ def init_db():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS orders (
     order_id TEXT,
+    Trans_id TEXT,
     product_id TEXT,
     PlanCode TEXT,
     email TEXT,
@@ -84,7 +85,7 @@ def cyberbiz_order():
             logging.info(f"產品類型: {variant_title}")
             logging.info(f"產品代號: {sku}")
             cursor.execute(
-                "INSERT INTO orders (order_id, PlanCode , email,product_id,qc,status, Title) VALUES (?,?,?,?,?,?,?)",
+                "INSERT INTO orders (order_id, PlanCode , email, product_id, qc,status, Title) VALUES (?,?,?,?,?,?,?,?)",
                 (order_id, sku, email, product_id, qc, "pending",title)
             )
             order_esim(order_id, sku, email)
@@ -109,14 +110,6 @@ def order_esim(order_id,planCode,email):
     raw = APP_ID + trans_id + timestamp + APP_SECRET
     ciphertext = hashlib.md5(raw.encode()).hexdigest()
     
-    conn = sqlite3.connect("orders.db")
-    cursor = conn.cursor()
-    cursor.execute(
-        "UPDATE orders SET status = 'processing' WHERE order_id = ? AND PlanCode = ? AND status = 'pending'",
-        (order_id, planCode)
-    )
-    conn.commit()
-    conn.close()
     payload = {
         "planCode": planCode,
         "qrcodeType": 0,
@@ -129,6 +122,14 @@ def order_esim(order_id,planCode,email):
         "Timestamp": timestamp,
         "Ciphertext": ciphertext
     }
+    conn = sqlite3.connect("orders.db")
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE orders SET status = 'processing' WHERE order_id = ? AND PlanCode = ? AND Trans_id=? AND status = 'pending'",
+        (order_id, planCode, trans_id)
+    )
+    conn.commit()
+    conn.close()
     try:
         response=requests.post(RSP_SUBSCRIBE_API,json=payload,headers=headers,timeout=10)
         if response.json().get("code")=="000":
@@ -181,9 +182,11 @@ def notify_esim():
     """, (plan_code,))
     
     row = cursor.fetchone()
+    '''
     if not row:
         logging.error(f"找不到 plan_code {plan_code} 對應的訂單")
         return jsonify({"code": "999", "mesg": "Failed"})
+    
     email, title, order_id = row
 
     cursor.execute(
@@ -193,8 +196,10 @@ def notify_esim():
 
     conn.commit()
     conn.close()
-    
+    '''
     logging.info("訂購esim成功")
+    email='carrine0976@ymail.com'
+    title='TEST'
     send_order_email(email,qrcode,cid,title)
     return jsonify({"code": "000", "mesg": "success"})
     
