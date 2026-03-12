@@ -341,7 +341,7 @@ def send_order_email(to_email, qrcode_url, cid, product_name,qty_index,order_id 
 CYBERBIZ_USERNAME = "ekzL3c-xypTQ8GJfPi5boF2oPz5TE7xCnfwp8tvf0pY"
 CYBERBIZ_SECRET = b"IltgWm2sNwJpoAOYJkT0V3bUI78nYX9HhSgykFe4_-E"
 CYBERBIZ_TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3NzE5OTU3MDcsInNob3BfaWQiOjI3NTU0LCJzaG9wX2RvbWFpbiI6Ind1Z2UuY3liZXJiaXouY28ifQ.t9BwXuJkJm0U3BIOwvEpfXi895uvnh_m68ZYvpw7UKo"
-def close_cyberbiz_order(order_id):
+def close_cyberbiz_order(order_id:int):
     http_method = "PUT"
     url_base = "https://app-store-api.cyberbiz.io"
     url_path = f"/v1/orders/{order_id}/update_status"
@@ -375,7 +375,7 @@ def close_cyberbiz_order(order_id):
     
 @app.route("/test_close")
 def test_close():
-    close_cyberbiz_order("49579775")
+    close_cyberbiz_order(20051)
     return "done"
     
 @app.route("/orders")
