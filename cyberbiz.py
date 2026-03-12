@@ -327,7 +327,8 @@ def test_email():
 
 @app.route("/test-order-esim")
 def test_order_esim():
-    order_esim("TEST001", "PC10000000100090", "carrine0976@ymail.com")
+    trans_id = str(uuid.uuid4()).replace("-", "")[:20]
+    order_esim("TEST001", "PC10000000100090", "carrine0976@ymail.com", trans_id)
     return "order_esim triggered"
 
 if __name__ == "__main__":
