@@ -214,8 +214,8 @@ def notify_esim():
     return jsonify({"code": "000", "mesg": "success"})
     
 def add_text_to_QRcode(qrcode_url, cid, product_name):
-    qr_img_data, _ = urllib.request.urlretrieve(qrcode_url)
-    img=Image.open(qr_img_data)
+    response = requests.get(qrcode_url)
+    img = Image.open(io.BytesIO(response.content))
     
     header_height = 40
     footer_height = 40
@@ -241,7 +241,7 @@ def add_text_to_QRcode(qrcode_url, cid, product_name):
     
     return img_byte.read()
 def send_order_email(to_email, qrcode_url, cid, product_name,qty_index):
-    cid_list=[f"cid"]
+    
     from_email = "carrine0976@gmail.com"
     app_password = "kdws jamt mhue hmxc"
     pdf_path = "/root/app/cyberbiz-webhook/2026年版 ESIM 設定.pdf"
