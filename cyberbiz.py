@@ -351,7 +351,8 @@ def close_cyberbiz_order(order_id):
     dig = hmac.new(CYBERBIZ_SECRET, msg=sig_str.encode(), digestmod=hashlib.sha256).digest()
     sig = base64.b64encode(dig).decode()
     auth = f'hmac username="{CYBERBIZ_USERNAME}", algorithm="hmac-sha256", headers="x-date request-line digest", signature="{sig}"'
-
+    logging.info(f"secret length: {len(CYBERBIZ_SECRET)}")
+    logging.info(f"secret preview: {CYBERBIZ_SECRET[:5]}")
     headers = {
         "X-Date": x_date,
         "Digest": digest,
