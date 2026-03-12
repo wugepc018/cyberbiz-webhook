@@ -75,11 +75,18 @@ def cyberbiz_order():
     tasks = []
     auto_count = 0
     cursor.execute("SELECT COUNT(*) FROM orders WHERE order_id = ?", (order_id,))
-    existing_count = cursor.fetchone()[0] 
+    existing_count = cursor.fetchone()[0]
+
     for item in line_items:
         qc=item.get("qc")
         sku=item.get("sku")
-        if qc in AUTO_VENDOR:
+
+        if qc not in AUTO_VENDOR:
+            logging.info(f"訂單 {order_id} 含有非AUTO_VENDOR商品，整筆跳過")
+            logging.info(f"訂單 {order_id} 需要人工處理")
+            conn.close() 
+            return jsonify({"status": "ok"})
+        else:
             title=item.get("title")
             product_id=item.get("product_id")
             variant_title=item.get("variant_title")
@@ -97,10 +104,6 @@ def cyberbiz_order():
                 (order_id, trans_id, sku, email, product_id, qc, "pending", full_title, qty_index)
             )
             tasks.append((order_id, sku, email, trans_id))
-            
-        else:
-            product_id=item.get("product_id")
-            logging.info(f"{product_id} :需要人工處理")
             
     conn.commit()
     conn.close()
