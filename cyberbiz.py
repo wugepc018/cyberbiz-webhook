@@ -4,6 +4,7 @@ import os
 import requests
 import hmac
 import hashlib
+import base64
 import urllib.request
 from flask import Flask, request, jsonify
 import sqlite3
@@ -220,7 +221,7 @@ def notify_esim():
     
     logging.info(f"訂購esim成功 order_id={order_id} trans_id={trans_id}")
 
-    send_order_email(email, qrcode_url, cid, full_title, qty_index)
+    send_order_email(email, qrcode_url, cid, full_title, qty_index, order_id)
     return jsonify({"code": "000", "mesg": "success"})
     
 def add_text_to_QRcode(qrcode_url, product_name):
@@ -252,7 +253,7 @@ def add_text_to_QRcode(qrcode_url, product_name):
     img_byte.seek(0)
     
     return img_byte.read()
-def send_order_email(to_email, qrcode_url, cid, product_name,qty_index):
+def send_order_email(to_email, qrcode_url, cid, product_name,qty_index,order_id):
     
     from_email = "wuge.esim@gmail.com"
     app_password = "xbes bgfm sadp sidt"
@@ -326,12 +327,49 @@ def send_order_email(to_email, qrcode_url, cid, product_name,qty_index):
     
         server.send_message(msg)
         logging.info(f"Email ({qty_index}) sent!")
+        close_cyberbiz_order(order_id)
 
         server.quit()
         
     except Exception as e:
         logging.info(f"Send email failed: {e}")
 
+CYBERBIZ_SECRET="IltgWm2sNwJpoAOYJkT0V3bUI78nYX9HhSgykFe4_-E"
+CYBERBIZ_USERNAME="AutoTesting"
+
+
+def close_cyberbiz_order(order_id):
+    http_method = "PUT"
+    url_base = "https://api.cyberbiz.co"
+    url_path = f"/v1/orders/{order_id}/update_status"
+    url = url_base + url_path
+    x_date = time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime())
+    rline = http_method + ' ' + url_path + ' HTTP/1.1'
+    payload = "status=closed"
+    digest = "SHA-256=" + base64.b64encode(hashlib.sha256(payload.encode()).digest()).decode()
+    sig_str = "x-date: " + x_date + "\n" + rline + "\n" + "digest: " + digest
+    dig = hmac.new(CYBERBIZ_SECRET, msg=sig_str.encode(), digestmod=hashlib.sha256).digest()
+    sig = base64.b64encode(dig).decode()
+    auth = f'hmac username="{CYBERBIZ_USERNAME}", algorithm="hmac-sha256", headers="x-date request-line digest", signature="{sig}"'
+
+    headers = {
+        "X-Date": x_date,
+        "Digest": digest,
+        "Authorization": auth,
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+
+    try:
+        response = requests.put(url, headers=headers, data=payload, timeout=10)
+        logging.info(f"Cyberbiz 結案 order_id={order_id} response={response.text}")
+    except Exception as e:
+        logging.error(f"Cyberbiz 結案失敗 order_id={order_id}: {e}")
+    
+@app.route("/test_close")
+def test_close():
+    close_cyberbiz_order("20048")
+    return "done"
+    
 @app.route("/orders")
 def orders():
     conn = sqlite3.connect("orders.db")
