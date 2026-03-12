@@ -340,7 +340,7 @@ CYBERBIZ_USERNAME="AutoTesting"
 
 def close_cyberbiz_order(order_id):
     http_method = "PUT"
-    url_base = "https://api.cyberbiz.co"
+    url_base = "https://wuge.cyberbiz.co"
     url_path = f"/v1/orders/{order_id}/update_status"
     url = url_base + url_path
     x_date = time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime())
