@@ -334,7 +334,7 @@ def send_order_email(to_email, qrcode_url, cid, product_name,qty_index,order_id)
     except Exception as e:
         logging.info(f"Send email failed: {e}")
 
-CYBERBIZ_SECRET="IltgWm2sNwJpoAOYJkT0V3bUI78nYX9HhSgykFe4_-E"
+CYBERBIZ_SECRET=b"IltgWm2sNwJpoAOYJkT0V3bUI78nYX9HhSgykFe4_-E"
 CYBERBIZ_USERNAME="AutoTesting"
 
 
