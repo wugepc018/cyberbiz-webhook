@@ -27,6 +27,7 @@ logging.basicConfig(
 AUTO_VENDOR = ["AUTO001", "AUTO002"]
 APP_ID = "xtH7XEyey9Mv"
 APP_SECRET = "ECA021C324614BBC9CDE22BC3BC805AB"
+
 def init_db():
     conn = sqlite3.connect("orders.db")
     cursor = conn.cursor()
@@ -71,7 +72,10 @@ def cyberbiz_order():
     conn=sqlite3.connect("orders.db")
     cursor=conn.cursor()
     line_items = data.get("line_items", [])
-    
+    tasks = []
+    auto_count = 0
+    cursor.execute("SELECT COUNT(*) FROM orders WHERE order_id = ?", (order_id,))
+    existing_count = cursor.fetchone()[0] 
     for item in line_items:
         qc=item.get("qc")
         sku=item.get("sku")
@@ -85,13 +89,14 @@ def cyberbiz_order():
             logging.info(f"產品類型: {variant_title}")
             logging.info(f"產品代號: {sku}")
             trans_id = str(uuid.uuid4()).replace("-", "")[:20]
-            cursor.execute("SELECT COUNT(*) FROM orders WHERE order_id = ?", (order_id,))
-            qty_index = cursor.fetchone()[0] + 1
+            auto_count += 1 
+            qty_index = existing_count + auto_count
+            full_title = f"{title} {variant_title}" if variant_title else title
             cursor.execute(
                 "INSERT INTO orders (order_id, Trans_id, PlanCode, email, product_id, qc, status, Title, qty_index) VALUES (?,?,?,?,?,?,?,?,?)",
-                (order_id, trans_id, sku, email, product_id, qc, "pending", title, qty_index)
+                (order_id, trans_id, sku, email, product_id, qc, "pending", full_title, qty_index)
             )
-            order_esim(order_id, sku, email, trans_id)
+            tasks.append((order_id, sku, email, trans_id))
             
         else:
             product_id=item.get("product_id")
@@ -100,6 +105,9 @@ def cyberbiz_order():
     conn.commit()
     conn.close()
     
+    for task in tasks: 
+        order_esim(*task)
+        
     return jsonify({
         "status": "ok",
     })
@@ -197,7 +205,7 @@ def notify_esim():
         logging.error(f"找不到 trans_id={trans_id} 對應的訂單")
         return jsonify({"code": "999", "mesg": "Failed"})
     
-    email, title, order_id, qty_index = row
+    email, full_title, order_id, qty_index = row
 
     cursor.execute(
         "UPDATE orders SET status='completed', qrcode=? WHERE Trans_id=?",
@@ -209,10 +217,10 @@ def notify_esim():
     
     logging.info(f"訂購esim成功 order_id={order_id} trans_id={trans_id}")
 
-    send_order_email(email, qrcode, cid, title, qty_index)
+    send_order_email(email, qrcode, cid, full_title, qty_index)
     return jsonify({"code": "000", "mesg": "success"})
     
-def add_text_to_QRcode(qrcode_url, cid, product_name):
+def add_text_to_QRcode(qrcode_url, product_name):
     response = requests.get(qrcode_url)
     img = Image.open(io.BytesIO(response.content))
     
@@ -303,7 +311,7 @@ def send_order_email(to_email, qrcode_url, cid, product_name,qty_index):
             pdf.add_header('Content-Disposition', 'attachment', filename="2026年版 ESIM 設定.pdf")
             msg.attach(pdf)
     
-        img_data = add_text_to_QRcode(qrcode_url, cid, product_name)
+        img_data = add_text_to_QRcode(qrcode_url, product_name)
         img=MIMEImage(img_data)
         img.add_header("Content-ID", "<qrcode>")
         img.add_header("Content-Disposition", "inline")
