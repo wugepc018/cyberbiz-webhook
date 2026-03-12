@@ -41,7 +41,8 @@ def init_db():
     status TEXT,
     qrcode TEXT,
     qc TEXT,
-    Title TEXT
+    Title TEXT,
+    qty_index INTEGER
     )
     """)
     
@@ -85,9 +86,11 @@ def cyberbiz_order():
             logging.info(f"產品類型: {variant_title}")
             logging.info(f"產品代號: {sku}")
             trans_id = str(uuid.uuid4()).replace("-", "")[:20]
+            cursor.execute("SELECT COUNT(*) FROM orders WHERE order_id = ?", (order_id,))
+            qty_index = cursor.fetchone()[0] + 1
             cursor.execute(
-                "INSERT INTO orders (order_id, Trans_id, PlanCode, email, product_id, qc, status, Title) VALUES (?,?,?,?,?,?,?,?)",
-                (order_id, trans_id, sku, email, product_id, qc, "pending", title)
+                "INSERT INTO orders (order_id, Trans_id, PlanCode, email, product_id, qc, status, Title, qty_index) VALUES (?,?,?,?,?,?,?,?,?)",
+                (order_id, trans_id, sku, email, product_id, qc, "pending", title, qty_index)
             )
             order_esim(order_id, sku, email, trans_id)
             
@@ -184,7 +187,7 @@ def notify_esim():
     conn = sqlite3.connect("orders.db")
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT email, Title, order_id 
+        SELECT email, Title, order_id, qty_index 
         FROM orders 
         WHERE Trans_id = ? AND status = 'processing'
     """, (trans_id,))
@@ -195,7 +198,7 @@ def notify_esim():
         logging.error(f"找不到 trans_id={trans_id} 對應的訂單")
         return jsonify({"code": "999", "mesg": "Failed"})
     
-    email, title, order_id = row
+    email, title, order_id, qty_index = row
 
     cursor.execute(
         "UPDATE orders SET status='completed', qrcode=? WHERE Trans_id=?",
@@ -206,9 +209,8 @@ def notify_esim():
     conn.close()
     
     logging.info(f"訂購esim成功 order_id={order_id} trans_id={trans_id}")
-    email='carrine0976@ymail.com'
-    title='TEST'
-    send_order_email(email,qrcode,cid,title)
+
+    send_order_email(email, qrcode, cid, title, qty_index)
     return jsonify({"code": "000", "mesg": "success"})
     
 def add_text_to_QRcode(qrcode_url, cid, product_name):
@@ -224,8 +226,8 @@ def add_text_to_QRcode(qrcode_url, cid, product_name):
     draw=ImageDraw.Draw(new_img)
     
     try:
-        font_title = ImageFont.truetype("/Users/user/Downloads/NotoSansCJKtc-Regular.otf", 20)
-        font_cid = ImageFont.truetype("/System/Library/Fonts/STHeiti Light.ttc", 18)
+        font_title = ImageFont.truetype("/root/app/NotoSansCJKtc-Regular.otf", 20)
+        font_cid = ImageFont.truetype("/root/app/NotoSansCJKtc-Regular.otf", 18)
     except Exception:
         font_title = ImageFont.load_default()
         font_cid = ImageFont.load_default()
@@ -238,11 +240,10 @@ def add_text_to_QRcode(qrcode_url, cid, product_name):
     img_byte.seek(0)
     
     return img_byte.read()
-def send_order_email(to_email,qrcode_url,cid,product_name):
+def send_order_email(to_email, qrcode_url, cid, product_name,qty_index):
     cid_list=[f"cid"]
     from_email = "carrine0976@gmail.com"
     app_password = "kdws jamt mhue hmxc"
-    qrcode_url = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=HelloTest" #response["data"]["qrcode"]
     pdf_path = "/root/app/cyberbiz-webhook/2026年版 ESIM 設定.pdf"
     '''
     conn=sqlite3.connect("orders.db")
@@ -260,59 +261,59 @@ def send_order_email(to_email,qrcode_url,cid,product_name):
         server=smtplib.SMTP("smtp.gmail.com", 587)
         server.starttls()
         server.login(from_email,app_password)
-        for i, cid in enumerate(cid_list):
-            
-            msg=MIMEMultipart()
-            msg['Subject']=f"日本 5日每日2GB*2（{i+1}）"
-            msg['From']=from_email
-            msg['To'] = to_email
-            
-            body_html = """
-            <html>
-            <body style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.8; color: #333;">
-
-            <p>你好，</p>
-
-            <p>請於收到信件 <strong>90日內</strong> 透過 Wi-Fi 或行動上網來安裝完畢，逾期會失效。</p>
-
-            <p>記得一個 QR CODE 只能給<strong>一個手機掃描</strong>，被掃過就無法再給其他手機安裝了。<br>
-            安裝時請記得手機需<strong>連接網路</strong>，關掉<strong>飛航模式</strong>安裝。</p>
-
-            <p>安裝後會在 <strong>設定 &gt; 行動服務</strong> 中間的 SIM 出現「啟用中」的卡片，代表已經安裝進手機了，不用再重複掃描 QR CODE。<br>
-            由於台灣是非覆蓋國家，啟用中會比較久是正常現象請勿擔心。<br>
-            之後到國外再做行動數據的切換，開啟<strong>數據漫遊</strong>使用。</p>
-
-            <p>⚠️ 請勿移除 ESIM，移除後就無法補發也無法再重新安裝。<br>
-            回國後可以把 ESIM 做刪除，避免下次使用 ESIM 混到舊的。</p>
-
-            <p>下列網址是安裝 eSIM 的方式，可以參考：<br>
-            <a href="https://www.youtube.com/watch?v=VY47xtoHccg&t=8s">https://www.youtube.com/watch?v=VY47xtoHccg&t=8s</a></p>
-
-            <p>使用有什麼問題，請洽我們 吳哥舖客服帳號【LINE ID】<strong>@uup3894y</strong></p>
-
-            <p style="color: red;">由於 QR CODE 為數位複製品，無法做退換，還請多加注意。</p>
-            
-            <p>請掃描以下 QR Code 安裝您的 eSIM：</p>
-            <img src="cid:qrcode" width="200" >
-            
-            <p>謝謝你</p>
-            </body>
-            </html>
-            """
-            msg.attach(MIMEText(body_html, "html"))
-            with open(pdf_path, "rb") as f:
-                pdf = MIMEApplication(f.read(), _subtype="pdf")
-                pdf.add_header('Content-Disposition', 'attachment', filename="2026年版 ESIM 設定.pdf")
-                msg.attach(pdf)
         
-            img_data = add_text_to_QRcode(qrcode_url, cid, product_name)
-            img=MIMEImage(img_data)
-            img.add_header("Content-ID", "<qrcode>")
-            img.add_header("Content-Disposition", "inline")
-            msg.attach(img)     
+            
+        msg=MIMEMultipart()
+        msg['Subject']=f"{product_name}（{qty_index}）"
+        msg['From']=from_email
+        msg['To'] = to_email
         
-            server.send_message(msg)
-            logging.info(f"Email {i+1}sent!")
+        body_html = """
+        <html>
+        <body style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.8; color: #333;">
+
+        <p>你好，</p>
+
+        <p>請於收到信件 <strong>90日內</strong> 透過 Wi-Fi 或行動上網來安裝完畢，逾期會失效。</p>
+
+        <p>記得一個 QR CODE 只能給<strong>一個手機掃描</strong>，被掃過就無法再給其他手機安裝了。<br>
+        安裝時請記得手機需<strong>連接網路</strong>，關掉<strong>飛航模式</strong>安裝。</p>
+
+        <p>安裝後會在 <strong>設定 &gt; 行動服務</strong> 中間的 SIM 出現「啟用中」的卡片，代表已經安裝進手機了，不用再重複掃描 QR CODE。<br>
+        由於台灣是非覆蓋國家，啟用中會比較久是正常現象請勿擔心。<br>
+        之後到國外再做行動數據的切換，開啟<strong>數據漫遊</strong>使用。</p>
+
+        <p>⚠️ 請勿移除 ESIM，移除後就無法補發也無法再重新安裝。<br>
+        回國後可以把 ESIM 做刪除，避免下次使用 ESIM 混到舊的。</p>
+
+        <p>下列網址是安裝 eSIM 的方式，可以參考：<br>
+        <a href="https://www.youtube.com/watch?v=VY47xtoHccg&t=8s">https://www.youtube.com/watch?v=VY47xtoHccg&t=8s</a></p>
+
+        <p>使用有什麼問題，請洽我們 吳哥舖客服帳號【LINE ID】<strong>@uup3894y</strong></p>
+
+        <p style="color: red;">由於 QR CODE 為數位複製品，無法做退換，還請多加注意。</p>
+        
+        <p>請掃描以下 QR Code 安裝您的 eSIM：</p>
+        <img src="cid:qrcode" width="200" >
+        
+        <p>謝謝你</p>
+        </body>
+        </html>
+        """
+        msg.attach(MIMEText(body_html, "html"))
+        with open(pdf_path, "rb") as f:
+            pdf = MIMEApplication(f.read(), _subtype="pdf")
+            pdf.add_header('Content-Disposition', 'attachment', filename="2026年版 ESIM 設定.pdf")
+            msg.attach(pdf)
+    
+        img_data = add_text_to_QRcode(qrcode_url, cid, product_name)
+        img=MIMEImage(img_data)
+        img.add_header("Content-ID", "<qrcode>")
+        img.add_header("Content-Disposition", "inline")
+        msg.attach(img)     
+    
+        server.send_message(msg)
+        logging.info(f"Email ({qty_index}) sent!")
 
         server.quit()
         
@@ -331,9 +332,9 @@ def test_order_esim():
     conn = sqlite3.connect("orders.db")
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO orders (order_id, Trans_id, PlanCode, email, product_id, qc, status, Title) VALUES (?,?,?,?,?,?,?,?)",
-        ("TEST001", trans_id, "PC10000000100090", "carrine0976@ymail.com", "TEST_PRODUCT", "AUTO001", "pending", "測試商品")
-    )
+    "INSERT INTO orders (order_id, Trans_id, PlanCode, email, product_id, qc, status, Title, qty_index) VALUES (?,?,?,?,?,?,?,?,?)",
+    ("TEST001", trans_id, "PC10000000100090", "carrine0976@ymail.com", "TEST_PRODUCT", "AUTO001", "pending", "測試商品", 1)
+)
     conn.commit()
     conn.close()
     order_esim("TEST001", "PC10000000100090", "carrine0976@ymail.com", trans_id)
