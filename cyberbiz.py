@@ -217,7 +217,7 @@ def notify_esim():
     
     logging.info(f"訂購esim成功 order_id={order_id} trans_id={trans_id}")
 
-    send_order_email(email, qrcode, cid, full_title, qty_index)
+    send_order_email(email, qrcode_url, cid, full_title, qty_index)
     return jsonify({"code": "000", "mesg": "success"})
     
 def add_text_to_QRcode(qrcode_url, product_name):
@@ -226,18 +226,22 @@ def add_text_to_QRcode(qrcode_url, product_name):
     
     header_height = 60
     footer_height = 40
-    new_height=img.height + header_height + footer_height
-    new_img=Image.new("RGB",(img.width, new_height), "white")
-    new_img.paste(img, (0, header_height))
-    
-    draw=ImageDraw.Draw(new_img)
     
     try:
         font_title = ImageFont.truetype("/root/app/NotoSansCJKtc-Regular.otf", 20)
     except Exception:
         font_title = ImageFont.load_default()
         
-        
+    dummy_draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    bbox = dummy_draw.textbbox((0, 0), product_name, font=font_title)
+    text_width = bbox[2] - bbox[0] + 20  
+    
+    new_width = max(img.width, text_width)
+    new_height = img.height + header_height + footer_height
+    new_img = Image.new("RGB", (new_width, new_height), "white")
+    new_img.paste(img, (0, header_height))
+
+    draw=ImageDraw.Draw(new_img)
     draw.text((10, 10), f"{product_name}", fill="black",  font=font_title)
     
     img_byte=io.BytesIO()
