@@ -337,6 +337,7 @@ def send_order_email(to_email, qrcode_url, cid, product_name,qty_index,order_id)
 
 CYBERBIZ_USERNAME = "ekzL3c-xypTQ8GJfPi5boF2oPz5TE7xCnfwp8tvf0pY"
 CYBERBIZ_SECRET = b"IltgWm2sNwJpoAOYJkT0V3bUI78nYX9HhSgykFe4_-E"
+CYBERBIZ_TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3NzE5OTU3MDcsInNob3BfaWQiOjI3NTU0LCJzaG9wX2RvbWFpbiI6Ind1Z2UuY3liZXJiaXouY28ifQ.t9BwXuJkJm0U3BIOwvEpfXi895uvnh_m68ZYvpw7UKo"
 def close_cyberbiz_order(order_id):
     http_method = "PUT"
     url_base = "https://api.cyberbiz.co"
@@ -352,9 +353,9 @@ def close_cyberbiz_order(order_id):
     auth = f'hmac username="{CYBERBIZ_USERNAME}", algorithm="hmac-sha256", headers="x-date request-line digest", signature="{sig}"'
 
     headers = {
-        "X-Date": x_date,
-        "Digest": digest,
-        "Authorization": auth,
+        #"X-Date": x_date,
+        #"Digest": digest,
+        "Authorization": f"Bearer {CYBERBIZ_TOKEN}",
         "Content-Type": "application/x-www-form-urlencoded"
     }
     logging.info(f"x_date: {x_date}")
