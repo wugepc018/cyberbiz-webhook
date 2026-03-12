@@ -348,7 +348,7 @@ def close_cyberbiz_order(order_id:int):
     url = url_base + url_path
     x_date = time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime())
     rline = http_method + ' ' + url_path + ' HTTP/1.1'
-    payload = "status=completed"
+    payload = "status=closed"
     digest = "SHA-256=" + base64.b64encode(hashlib.sha256(payload.encode()).digest()).decode()
     sig_str = "x-date: " + x_date + "\n" + rline + "\n" + "digest: " + digest
     dig = hmac.new(CYBERBIZ_SECRET, msg=sig_str.encode(), digestmod=hashlib.sha256).digest()
