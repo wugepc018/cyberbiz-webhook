@@ -328,6 +328,14 @@ def test_email():
 @app.route("/test-order-esim")
 def test_order_esim():
     trans_id = str(uuid.uuid4()).replace("-", "")[:20]
+    conn = sqlite3.connect("orders.db")
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO orders (order_id, Trans_id, PlanCode, email, product_id, qc, status, Title) VALUES (?,?,?,?,?,?,?,?)",
+        ("TEST001", trans_id, "PC10000000100090", "carrine0976@ymail.com", "TEST_PRODUCT", "AUTO001", "pending", "測試商品")
+    )
+    conn.commit()
+    conn.close()
     order_esim("TEST001", "PC10000000100090", "carrine0976@ymail.com", trans_id)
     return "order_esim triggered"
 
