@@ -342,40 +342,15 @@ CYBERBIZ_USERNAME = "ekzL3c-xypTQ8GJfPi5boF2oPz5TE7xCnfwp8tvf0pY"
 CYBERBIZ_SECRET = b"IltgWm2sNwJpoAOYJkT0V3bUI78nYX9HhSgykFe4_-E"
 CYBERBIZ_TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3NzE5OTU3MDcsInNob3BfaWQiOjI3NTU0LCJzaG9wX2RvbWFpbiI6Ind1Z2UuY3liZXJiaXouY28ifQ.t9BwXuJkJm0U3BIOwvEpfXi895uvnh_m68ZYvpw7UKo"
 
-def get_order_id(order_numbers):
-    
-    http_method = "GET"
-    url=f"https://api.cyberbiz.co/v1/orders/get_order_id?order_numbers={str(order_numbers)}"
-    x_date = time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime())
-    payload = "status=closed"
-    digest = "SHA-256=" + base64.b64encode(hashlib.sha256(payload.encode()).digest()).decode()
-    headers = {
-        "X-Date": x_date,
-        "Digest": digest,
-        "Authorization": f"Bearer {CYBERBIZ_TOKEN}",
-        "Content-Type": "application/x-www-form-urlencoded"
-    }
-    try:
-        response = requests.get(url, headers=headers, data=payload, timeout=10)
-        
-        logging.info(f"Cyberbiz 內部 order_id= response={response.text}")
-       
-    except Exception as e:
-        logging.error(f"Cyberbiz 結案失敗 order_id=: {e}")
-
 def close_cyberbiz_order(order_id:int):
-    http_method = "PUT"
+    
     url_base = "https://app-store-api.cyberbiz.io"
     url_path = f"/v1/orders/{order_id}/update_status"
     url = url_base + url_path
     x_date = time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime())
-    rline = http_method + ' ' + url_path + ' HTTP/1.1'
     payload = "status=closed"
     digest = "SHA-256=" + base64.b64encode(hashlib.sha256(payload.encode()).digest()).decode()
-    sig_str = "x-date: " + x_date + "\n" + rline + "\n" + "digest: " + digest
-    dig = hmac.new(CYBERBIZ_SECRET, msg=sig_str.encode(), digestmod=hashlib.sha256).digest()
-    sig = base64.b64encode(dig).decode()
-    auth = f'hmac username="{CYBERBIZ_USERNAME}", algorithm="hmac-sha256", headers="x-date request-line digest", signature="{sig}"'
+    
     logging.info(f"secret length: {len(CYBERBIZ_SECRET)}")
     logging.info(f"secret preview: {CYBERBIZ_SECRET[:5]}")
     headers = {
@@ -385,10 +360,7 @@ def close_cyberbiz_order(order_id:int):
         "Content-Type": "application/x-www-form-urlencoded"
     }
     logging.info(f"x_date: {x_date}")
-    logging.info(f"rline: {rline}")
     logging.info(f"digest: {digest}")
-    logging.info(f"sig_str: {sig_str}")
-    logging.info(f"auth: {auth}")
     try:
         response = requests.put(url, headers=headers, data=payload, timeout=10)
         logging.info(f"Cyberbiz 結案 order_id={order_id} response={response.text}")
