@@ -353,8 +353,8 @@ def close_cyberbiz_order(order_id):
     auth = f'hmac username="{CYBERBIZ_USERNAME}", algorithm="hmac-sha256", headers="x-date request-line digest", signature="{sig}"'
 
     headers = {
-        #"X-Date": x_date,
-        #"Digest": digest,
+        "X-Date": x_date,
+        "Digest": digest,
         "Authorization": f"Bearer {CYBERBIZ_TOKEN}",
         "Content-Type": "application/x-www-form-urlencoded"
     }
