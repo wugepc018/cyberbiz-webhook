@@ -84,11 +84,12 @@ def cyberbiz_order():
             logging.info(f"產品名稱: {title}")
             logging.info(f"產品類型: {variant_title}")
             logging.info(f"產品代號: {sku}")
+            trans_id = str(uuid.uuid4()).replace("-", "")[:20]
             cursor.execute(
-                "INSERT INTO orders (order_id, PlanCode , email, product_id, qc,status, Title) VALUES (?,?,?,?,?,?,?,?)",
-                (order_id, sku, email, product_id, qc, "pending",title)
+                "INSERT INTO orders (order_id, Trans_id, PlanCode, email, product_id, qc, status, Title) VALUES (?,?,?,?,?,?,?,?)",
+                (order_id, trans_id, sku, email, product_id, qc, "pending", title)
             )
-            order_esim(order_id, sku, email)
+            order_esim(order_id, sku, email, trans_id)
             
         else:
             product_id=item.get("product_id")
@@ -103,12 +104,20 @@ def cyberbiz_order():
     
 #訂購esim
 Base_URL="https://neware.biz"
-def order_esim(order_id,planCode,email):
+def order_esim(order_id, planCode, email, trans_id):
     RSP_SUBSCRIBE_API=f"{Base_URL}/openapi/esim/plan/subscribe"
-    trans_id = str(uuid.uuid4()).replace("-", "")[:20]
     timestamp = str(int(time.time() * 1000))  
     raw = APP_ID + trans_id + timestamp + APP_SECRET
     ciphertext = hashlib.md5(raw.encode()).hexdigest()
+
+    conn = sqlite3.connect("orders.db")
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE orders SET status = 'processing' WHERE Trans_id = ? AND status = 'pending'",
+        (trans_id,)
+    )
+    conn.commit()
+    conn.close()
     
     payload = {
         "planCode": planCode,
@@ -122,24 +131,22 @@ def order_esim(order_id,planCode,email):
         "Timestamp": timestamp,
         "Ciphertext": ciphertext
     }
-    conn = sqlite3.connect("orders.db")
-    cursor = conn.cursor()
-    cursor.execute(
-        "UPDATE orders SET status = 'processing' WHERE order_id = ? AND PlanCode = ? AND Trans_id=? AND status = 'pending'",
-        (order_id, planCode, trans_id)
-    )
-    conn.commit()
-    conn.close()
     try:
         response=requests.post(RSP_SUBSCRIBE_API,json=payload,headers=headers,timeout=10)
+        
         if response.json().get("code")=="000":
-            return jsonify({
-            "message": "Order esim Request Send Success"
-                }), 200 
+            logging.info(f"訂購請求成功 order_id={order_id} planCode={planCode} trans_id={trans_id}")
+        
         else:
-            return jsonify({
-            "message":  "Order esim Request Send Failed"
-                }), 400 
+            conn = sqlite3.connect("orders.db")
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE orders SET status = 'pending' WHERE Trans_id = ?",
+                (trans_id,)
+            )
+            conn.commit()
+            conn.close()
+            
     except Exception as e:
         logging.error(f"呼叫供應商API失敗: {e}")
         
@@ -152,7 +159,10 @@ def notify_esim():
     result_code=data.get("resultCode")
     if result_code!="000":
         logging.error(f"trans_id{trans_id} 訂購失敗：{data.get('mesg')}")
-        return jsonify({"msg":"system error"})
+        return jsonify({
+            "code": "999",
+            "mesg": "System Error"
+        })
     
     esim_data=data.get("data", {})
     cid= esim_data.get("cid")
@@ -176,28 +186,26 @@ def notify_esim():
     cursor.execute("""
         SELECT email, Title, order_id 
         FROM orders 
-        WHERE PlanCode = ? AND status = 'processing'
-        ORDER BY rowid ASC
-        LIMIT 1
-    """, (plan_code,))
+        WHERE Trans_id = ? AND status = 'processing'
+    """, (trans_id,))
     
     row = cursor.fetchone()
-    '''
+    
     if not row:
-        logging.error(f"找不到 plan_code {plan_code} 對應的訂單")
+        logging.error(f"找不到 trans_id={trans_id} 對應的訂單")
         return jsonify({"code": "999", "mesg": "Failed"})
     
     email, title, order_id = row
 
     cursor.execute(
-        "UPDATE orders SET status='completed', qrcode= ? WHERE order_id = ? AND status = 'processing'",
-        (qrcode_url, order_id)
+        "UPDATE orders SET status='completed', qrcode=? WHERE Trans_id=?",
+        (qrcode_url, trans_id)
     )
 
     conn.commit()
     conn.close()
-    '''
-    logging.info("訂購esim成功")
+    
+    logging.info(f"訂購esim成功 order_id={order_id} trans_id={trans_id}")
     email='carrine0976@ymail.com'
     title='TEST'
     send_order_email(email,qrcode,cid,title)
