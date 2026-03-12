@@ -43,7 +43,8 @@ def init_db():
     qrcode TEXT,
     qc TEXT,
     Title TEXT,
-    qty_index INTEGER
+    qty_index INTEGER,
+    order_id_for_close_cyberbiz
     )
     """)
     
@@ -66,6 +67,7 @@ def cyberbiz_order():
     
     email = data.get("customer", {}).get("email")
     order_id = data.get("order_number")
+    order_id_for_close_cyberbiz = data.get("id")
     
     logging.info(f"Order ID: {order_id}")
     logging.info(f"客戶email: {email}")
@@ -101,10 +103,10 @@ def cyberbiz_order():
             qty_index = existing_count + auto_count
             full_title = f"{title} {variant_title}" if variant_title else title
             cursor.execute(
-                "INSERT INTO orders (order_id, Trans_id, PlanCode, email, product_id, qc, status, Title, qty_index) VALUES (?,?,?,?,?,?,?,?,?)",
-                (order_id, trans_id, sku, email, product_id, qc, "pending", full_title, qty_index)
+                "INSERT INTO orders (order_id, Trans_id, PlanCode, email, product_id, qc, status, Title, qty_index, order_id_for_close_cyberbiz) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (order_id, trans_id, sku, email, product_id, qc, "pending", full_title, qty_index , order_id_for_close_cyberbiz)
             )
-            tasks.append((order_id, sku, email, trans_id))
+            tasks.append((order_id, sku, email, trans_id, order_id_for_close_cyberbiz))
             
     conn.commit()
     conn.close()
@@ -118,7 +120,7 @@ def cyberbiz_order():
     
 #訂購esim
 Base_URL="https://neware.biz"
-def order_esim(order_id, planCode, email, trans_id):
+def order_esim(order_id, planCode, email, trans_id , order_id_for_close_cyberbiz):
     RSP_SUBSCRIBE_API=f"{Base_URL}/openapi/esim/plan/subscribe"
     timestamp = str(int(time.time() * 1000))  
     raw = APP_ID + trans_id + timestamp + APP_SECRET
@@ -198,7 +200,7 @@ def notify_esim():
     conn = sqlite3.connect("orders.db")
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT email, Title, order_id, qty_index 
+        SELECT email, Title, order_id, qty_index, order_id_for_close_cyberbiz 
         FROM orders 
         WHERE Trans_id = ? AND status = 'processing'
     """, (trans_id,))
@@ -209,7 +211,7 @@ def notify_esim():
         logging.error(f"找不到 trans_id={trans_id} 對應的訂單")
         return jsonify({"code": "999", "mesg": "Failed"})
     
-    email, full_title, order_id, qty_index = row
+    email, full_title, order_id, qty_index, order_id_for_close_cyberbiz= row
 
     cursor.execute(
         "UPDATE orders SET status='completed', qrcode=? WHERE Trans_id=?",
@@ -221,7 +223,7 @@ def notify_esim():
     
     logging.info(f"訂購esim成功 order_id={order_id} trans_id={trans_id}")
 
-    send_order_email(email, qrcode_url, cid, full_title, qty_index, order_id)
+    send_order_email(email, qrcode_url, cid, full_title, qty_index, order_id, order_id_for_close_cyberbiz)
     return jsonify({"code": "000", "mesg": "success"})
     
 def add_text_to_QRcode(qrcode_url, product_name):
@@ -253,7 +255,7 @@ def add_text_to_QRcode(qrcode_url, product_name):
     img_byte.seek(0)
     
     return img_byte.read()
-def send_order_email(to_email, qrcode_url, cid, product_name,qty_index,order_id):
+def send_order_email(to_email, qrcode_url, cid, product_name,qty_index,order_id ,order_id_for_close_cyberbiz):
     
     from_email = "wuge.esim@gmail.com"
     app_password = "xbes bgfm sadp sidt"
@@ -283,33 +285,34 @@ def send_order_email(to_email, qrcode_url, cid, product_name,qty_index,order_id)
         
         body_html = """
         <html>
-        <body style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.8; color: #333;">
+        <body style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.8; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
 
-        <p>你好，</p>
+        <p>你好</p>
 
         <p>請於收到信件 <strong>90日內</strong> 透過 Wi-Fi 或行動上網來安裝完畢，逾期會失效。</p>
 
-        <p>記得一個 QR CODE 只能給<strong>一個手機掃描</strong>，被掃過就無法再給其他手機安裝了。<br>
-        安裝時請記得手機需<strong>連接網路</strong>，關掉<strong>飛航模式</strong>安裝。</p>
+        <p>⚠️ 請記得一個 QR CODE 只能給<strong>一個手機</strong>掃描，被掃過就無法再給其他手機安裝了<br>
+        安裝時請記得手機需<strong>連接網路</strong>，關掉<strong>飛航模式</strong></p>
 
-        <p>安裝後會在 <strong>設定 &gt; 行動服務</strong> 中間的 SIM 出現「啟用中」的卡片，代表已經安裝進手機了，不用再重複掃描 QR CODE。<br>
-        由於台灣是非覆蓋國家，啟用中會比較久是正常現象請勿擔心。<br>
-        之後到國外再做行動數據的切換，開啟<strong>數據漫遊</strong>使用。</p>
+        <p><strong>安裝方式(1)：</strong>打開手機的信箱，長按本信件下面的 CODE，會有一個加入ESIM 可以進行安裝</p>
 
-        <p>⚠️ 請勿移除 ESIM，移除後就無法補發也無法再重新安裝。<br>
-        回國後可以把 ESIM 做刪除，避免下次使用 ESIM 混到舊的。</p>
+        <p><strong>安裝方式(2)：</strong>將QR CODE 存到手機相簿後，如附件說明進入照相機圖庫安裝</p>
 
-        <p>下列網址是安裝 eSIM 的方式，可以參考：<br>
-        <a href="https://www.youtube.com/watch?v=VY47xtoHccg&t=8s">https://www.youtube.com/watch?v=VY47xtoHccg&t=8s</a></p>
+        <p><strong>安裝方式(3)：</strong>於 設定 &gt; 行動服務，點選加入ESIM，掃描 QR CODE 畫面安裝</p>
 
-        <p>使用有什麼問題，請洽我們 吳哥舖客服帳號【LINE ID】<strong>@uup3894y</strong></p>
+        <p>安裝後會在 設定 &gt; 行動服務 中間的SIM 出現<strong>啟用中</strong>的SIM卡，代表已經安裝進手機了。不用再重複掃描QR CODE。<br>
+        由於台灣是非覆蓋國家，啟用中會比較久是正常現象，請勿擔心。<br>
+        安裝完畢出現無法啟用也是因為人還在台灣在非覆蓋國家的關係，不用理會。</p>
 
-        <p style="color: red;">由於 QR CODE 為數位複製品，無法做退換，還請多加注意。</p>
-        
-        <p>請掃描以下 QR Code 安裝您的 eSIM：</p>
-        <img src="cid:qrcode" width="200" >
-        
+        <p>安裝完成後到國外再做行動數據的切換，開啟<strong>數據漫遊</strong>使用<br>
+        🚫 請勿移除ESIM，移除後就無法補發也無法再重新安裝<br>
+        回國後再把ESIM 做刪除掉，避免下次使用ESIM混到舊的</p>
+
+        <p>安裝使用有什麼問題，請洽我們 吳哥舖客服帳號【LINE ID】<strong>@uup3894y</strong><br>
+        由於QR CODE 為數位複製品，無法做退換，還請多加注意</p>
+
         <p>謝謝你</p>
+
         </body>
         </html>
         """
@@ -327,7 +330,7 @@ def send_order_email(to_email, qrcode_url, cid, product_name,qty_index,order_id)
     
         server.send_message(msg)
         logging.info(f"Email ({qty_index}) sent!")
-        close_cyberbiz_order(order_id)
+        close_cyberbiz_order(order_id_for_close_cyberbiz)
 
         server.quit()
         
@@ -345,7 +348,7 @@ def close_cyberbiz_order(order_id):
     url = url_base + url_path
     x_date = time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime())
     rline = http_method + ' ' + url_path + ' HTTP/1.1'
-    payload = "status=closed"
+    payload = "status=completed"
     digest = "SHA-256=" + base64.b64encode(hashlib.sha256(payload.encode()).digest()).decode()
     sig_str = "x-date: " + x_date + "\n" + rline + "\n" + "digest: " + digest
     dig = hmac.new(CYBERBIZ_SECRET, msg=sig_str.encode(), digestmod=hashlib.sha256).digest()
@@ -372,7 +375,7 @@ def close_cyberbiz_order(order_id):
     
 @app.route("/test_close")
 def test_close():
-    close_cyberbiz_order("20048")
+    close_cyberbiz_order("49579775")
     return "done"
     
 @app.route("/orders")
