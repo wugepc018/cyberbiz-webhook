@@ -318,6 +318,61 @@ def send_order_email(to_email, qrcode_url, cid, product_name,qty_index):
     except Exception as e:
         logging.info(f"Send email failed: {e}")
 
+@app.route("/orders")
+def orders():
+    conn = sqlite3.connect("orders.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT order_id, Trans_id, PlanCode, email, status, qc, Title, qty_index 
+        FROM orders 
+        ORDER BY rowid DESC
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+
+    html = """
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>訂單報表</title>
+        <style>
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            table { border-collapse: collapse; width: 100%; }
+            th, td { border: 1px solid #ccc; padding: 8px; text-align: left; font-size: 13px; }
+            th { background: #f0f0f0; }
+            .completed { color: green; }
+            .processing { color: orange; }
+            .pending { color: gray; }
+        </style>
+    </head>
+    <body>
+        <h2>訂單報表</h2>
+        <table>
+            <tr>
+                <th>訂單編號</th>
+                <th>產品名稱</th>
+                <th>PlanCode</th>
+                <th>Email</th>
+                <th>狀態</th>
+                <th>第幾張</th>
+            </tr>
+    """
+
+    for row in rows:
+        order_id, trans_id, plan_code, email, status, qc, title, qty_index = row
+        html += f"""
+        <tr>
+            <td>{order_id}</td>
+            <td>{title}</td>
+            <td>{plan_code}</td>
+            <td>{email}</td>
+            <td class="{status}">{status}</td>
+            <td>{qty_index}</td>
+        </tr>
+        """
+
+    html += "</table></body></html>"
+    return html
 @app.route("/test-email")
 def test_email():
     send_order_email()
