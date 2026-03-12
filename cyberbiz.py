@@ -227,12 +227,10 @@ def add_text_to_QRcode(qrcode_url, cid, product_name):
     
     try:
         font_title = ImageFont.truetype("/root/app/NotoSansCJKtc-Regular.otf", 20)
-        font_cid = ImageFont.truetype("/root/app/NotoSansCJKtc-Regular.otf", 18)
     except Exception:
         font_title = ImageFont.load_default()
-        font_cid = ImageFont.load_default()
         
-    draw.text((10, img.height + header_height + 10), f"{cid}", fill="black" , font=font_cid)
+        
     draw.text((10, 10), f"{product_name}", fill="black",  font=font_title)
     
     img_byte=io.BytesIO()
