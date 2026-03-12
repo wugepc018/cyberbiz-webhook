@@ -224,7 +224,7 @@ def add_text_to_QRcode(qrcode_url, product_name):
     response = requests.get(qrcode_url)
     img = Image.open(io.BytesIO(response.content))
     
-    header_height = 40
+    header_height = 60
     footer_height = 40
     new_height=img.height + header_height + footer_height
     new_img=Image.new("RGB",(img.width, new_height), "white")
@@ -247,8 +247,8 @@ def add_text_to_QRcode(qrcode_url, product_name):
     return img_byte.read()
 def send_order_email(to_email, qrcode_url, cid, product_name,qty_index):
     
-    from_email = "carrine0976@gmail.com"
-    app_password = "kdws jamt mhue hmxc"
+    from_email = "wuge.esim@gmail.com"
+    app_password = "xbes bgfm sadp sidt"
     pdf_path = "/root/app/cyberbiz-webhook/2026年版 ESIM 設定.pdf"
     '''
     conn=sqlite3.connect("orders.db")
@@ -360,6 +360,7 @@ def orders():
                 <th>產品名稱</th>
                 <th>PlanCode</th>
                 <th>Email</th>
+                <th>交易編號</th>
                 <th>狀態</th>
                 <th>第幾張</th>
             </tr>
@@ -373,6 +374,7 @@ def orders():
             <td>{title}</td>
             <td>{plan_code}</td>
             <td>{email}</td>
+            <td>{trans_id}</td>
             <td class="{status}">{status}</td>
             <td>{qty_index}</td>
         </tr>
@@ -380,25 +382,6 @@ def orders():
 
     html += "</table></body></html>"
     return html
-@app.route("/test-email")
-def test_email():
-    send_order_email()
-    return "Email sent test"
-#send_order_email(to_email,"ORD123456", "https://example.com/qrcode.png")
-
-@app.route("/test-order-esim")
-def test_order_esim():
-    trans_id = str(uuid.uuid4()).replace("-", "")[:20]
-    conn = sqlite3.connect("orders.db")
-    cursor = conn.cursor()
-    cursor.execute(
-    "INSERT INTO orders (order_id, Trans_id, PlanCode, email, product_id, qc, status, Title, qty_index) VALUES (?,?,?,?,?,?,?,?,?)",
-    ("TEST001", trans_id, "PC10000000100090", "carrine0976@ymail.com", "TEST_PRODUCT", "AUTO001", "pending", "測試商品", 1)
-)
-    conn.commit()
-    conn.close()
-    order_esim("TEST001", "PC10000000100090", "carrine0976@ymail.com", trans_id)
-    return "order_esim triggered"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
