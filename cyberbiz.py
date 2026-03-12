@@ -357,7 +357,11 @@ def close_cyberbiz_order(order_id):
         "Authorization": auth,
         "Content-Type": "application/x-www-form-urlencoded"
     }
-
+    logging.info(f"x_date: {x_date}")
+    logging.info(f"rline: {rline}")
+    logging.info(f"digest: {digest}")
+    logging.info(f"sig_str: {sig_str}")
+    logging.info(f"auth: {auth}")
     try:
         response = requests.put(url, headers=headers, data=payload, timeout=10)
         logging.info(f"Cyberbiz 結案 order_id={order_id} response={response.text}")
