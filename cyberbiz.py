@@ -35,6 +35,7 @@ def init_db():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS orders (
     order_id TEXT,
+    Created_AT,
     Trans_id TEXT,
     product_id TEXT,
     PlanCode TEXT,
@@ -44,10 +45,15 @@ def init_db():
     qc TEXT,
     Title TEXT,
     qty_index INTEGER,
-    order_id_for_close_cyberbiz
+    order_id_for_close_cyberbiz INTEGER
     )
     """)
-    
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS CID_TABLE (
+    CID INTEGER,
+    Trans_id TEXT
+    )
+    """)
     conn.commit()
     conn.close()
 init_db()
@@ -68,7 +74,7 @@ def cyberbiz_order():
     email = data.get("customer", {}).get("email")
     order_id = data.get("order_number")
     order_id_for_close_cyberbiz = data.get("id")
-    
+    created_at=data.get("created_at")
     logging.info(f"Order ID: {order_id}")
     logging.info(f"客戶email: {email}")
     
@@ -103,8 +109,8 @@ def cyberbiz_order():
             qty_index = existing_count + auto_count
             full_title = f"{title} {variant_title}" if variant_title else title
             cursor.execute(
-                "INSERT INTO orders (order_id, Trans_id, PlanCode, email, product_id, qc, status, Title, qty_index, order_id_for_close_cyberbiz) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (order_id, trans_id, sku, email, product_id, qc, "pending", full_title, qty_index , order_id_for_close_cyberbiz)
+                "INSERT INTO orders (order_id, Created_AT, Trans_id, PlanCode, email, product_id, qc, status, Title, qty_index, order_id_for_close_cyberbiz) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (order_id, created_at, trans_id, sku, email, product_id, qc, "pending", full_title, qty_index , order_id_for_close_cyberbiz)
             )
             tasks.append((order_id, sku, email, trans_id, order_id_for_close_cyberbiz))
             
@@ -168,11 +174,13 @@ def order_esim(order_id, planCode, email, trans_id , order_id_for_close_cyberbiz
         
 @app.route("/notify/esim/plan/subscribe", methods=["POST"])
 def notify_esim():
+    
     data=request.json
     logging.info("eSIM訂購通知收到:")
     logging.info(json.dumps(data, indent=2, ensure_ascii=False))
     trans_id=data.get("transId")
     result_code=data.get("resultCode")
+    
     if result_code!="000":
         logging.error(f"trans_id{trans_id} 訂購失敗：{data.get('mesg')}")
         return jsonify({
@@ -185,12 +193,13 @@ def notify_esim():
     qrcode_type = esim_data.get("qrcodeType")
     qrcode = esim_data.get("qrcode")
     plan_code = esim_data.get("planCode")
-    
+
     logging.info(f"transId: {trans_id}")
     logging.info(f"CID: {cid}")
     logging.info(f"qrcodeType: {qrcode_type}")
     logging.info(f"qrcode: {qrcode}")
     logging.info(f"transId: {trans_id}, CID: {cid}, planCode: {plan_code}")
+    
     if qrcode_type == 1:
         # LPA 字串，用 qrserver 產生 QR Code 圖片
         qrcode_url = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={qrcode}"
@@ -211,6 +220,7 @@ def notify_esim():
         logging.error(f"找不到 trans_id={trans_id} 對應的訂單")
         return jsonify({"code": "999", "mesg": "Failed"})
     
+    cursor.execute("INSERT INTO CID_TABLE (CID, Trans_id) VALUES (?, ?)", (cid, trans_id))
     email, full_title, order_id, qty_index, order_id_for_close_cyberbiz= row
 
     cursor.execute(
@@ -295,7 +305,7 @@ def send_order_email(to_email, qrcode_url, cid, product_name,qty_index,order_id 
         安裝時請記得手機需<strong>連接網路</strong>，關掉<strong>飛航模式</strong></p>
 
         <p><strong>安裝方式(1)：</strong>打開手機的信箱，長按本信件下面的 CODE，會有一個加入ESIM 可以進行安裝</p>
-
+    
         <p><strong>安裝方式(2)：</strong>將QR CODE 存到手機相簿後，如附件說明進入照相機圖庫安裝</p>
 
         <p><strong>安裝方式(3)：</strong>於 設定 &gt; 行動服務，點選加入ESIM，掃描 QR CODE 畫面安裝</p>
@@ -310,7 +320,9 @@ def send_order_email(to_email, qrcode_url, cid, product_name,qty_index,order_id 
 
         <p>安裝使用有什麼問題，請洽我們 吳哥舖客服帳號【LINE ID】<strong>@uup3894y</strong><br>
         由於QR CODE 為數位複製品，無法做退換，還請多加注意</p>
-
+        <p>
+        <img src="cid:qrcode" style="width:220px;">
+        </p>
         <p>謝謝你</p>
 
         </body>
@@ -377,13 +389,13 @@ def orders():
     conn = sqlite3.connect("orders.db")
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT order_id, Trans_id, PlanCode, email, status, qc, Title, qty_index 
-        FROM orders 
-        ORDER BY rowid DESC
+    SELECT o.order_id, o.Created_AT, o.PlanCode, o.email, o.status, o.qc, o.Title, c.CID
+    FROM orders o
+    LEFT JOIN CID_TABLE c ON o.Trans_id = c.Trans_id
+    ORDER BY o.rowid DESC
     """)
     rows = cursor.fetchall()
     conn.close()
-
     html = """
     <html>
     <head>
@@ -403,27 +415,31 @@ def orders():
         <h2>訂單報表</h2>
         <table>
             <tr>
-                <th>訂單編號</th>
-                <th>產品名稱</th>
+                <th>訂購日期</th>
+                <th>e-mail</th>
+                <th>訂單單號</th>
+                <th>數量</th>
+                <th>CID</th>
+                <th>金額</th>
                 <th>PlanCode</th>
-                <th>Email</th>
-                <th>交易編號</th>
+                <th>廠商代號</th>
                 <th>狀態</th>
-                <th>第幾張</th>
             </tr>
     """
-
     for row in rows:
-        order_id, trans_id, plan_code, email, status, qc, title, qty_index = row
+        order_id, create_at, plan_code, email, status, qc, title, cid = row
+        amount=1
         html += f"""
         <tr>
+            <td>{create_at}</td>
+            <td>{email}</td>
             <td>{order_id}</td>
             <td>{title}</td>
+            <td>{cid}</td>
+            <td>{amount}</td>
             <td>{plan_code}</td>
-            <td>{email}</td>
-            <td>{trans_id}</td>
+            <td>{qc}</td>
             <td class="{status}">{status}</td>
-            <td>{qty_index}</td>
         </tr>
         """
 
