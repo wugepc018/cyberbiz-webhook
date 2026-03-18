@@ -33,6 +33,7 @@ APP_SECRET = "ECA021C324614BBC9CDE22BC3BC805AB"
 def init_db():
     conn = sqlite3.connect("orders.db")
     cursor = conn.cursor()
+    print("DB PATH:", os.path.abspath("orders.db"))
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS orders (
     order_id TEXT,
