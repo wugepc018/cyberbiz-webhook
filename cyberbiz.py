@@ -461,14 +461,25 @@ def test_close():
     
 @app.route("/orders")
 def orders():
+    order_id_query = request.args.get("order_id")  
     conn = sqlite3.connect("orders.db")
     cursor = conn.cursor()
-    cursor.execute("""
-    SELECT o.order_id, o.Created_AT, o.PlanCode, o.email, o.status, o.qc, o.Title, c.CID,  o.NOTE
-    FROM orders o
-    LEFT JOIN CID_TABLE c ON o.Trans_id = c.Trans_id
-    ORDER BY o.rowid DESC
-    """)
+    if order_id_query:
+        cursor.execute("""
+        SELECT o.order_id, o.Created_AT, o.PlanCode, o.email, o.status, o.qc, o.Title, c.CID, o.NOTE
+        FROM orders o
+        LEFT JOIN CID_TABLE c ON o.Trans_id = c.Trans_id
+        WHERE o.order_id = ?
+        ORDER BY o.rowid DESC
+        """, (order_id_query,))
+    else:
+        cursor.execute("""
+        SELECT o.order_id, o.Created_AT, o.PlanCode, o.email, o.status, o.qc, o.Title, c.CID, o.NOTE
+        FROM orders o
+        LEFT JOIN CID_TABLE c ON o.Trans_id = c.Trans_id
+        ORDER BY o.rowid DESC
+        """)
+        
     rows = cursor.fetchall()
     conn.close()
     html = """
@@ -488,6 +499,13 @@ def orders():
     </head>
     <body>
         <h2>訂單報表</h2>
+            <form method="get" action="/orders" style="margin-bottom:20px;">
+                <input type="text" name="order_id" placeholder="輸入訂單單號" 
+                value="{order_id_query if order_id_query else ''}"
+                style="padding:5px; width:200px;">
+                <button type="submit">搜尋</button>
+                <a href="/orders"><button type="button">清除</button></a>
+            </form>
         <table>
             <tr>
                 <th>訂購日期</th>
