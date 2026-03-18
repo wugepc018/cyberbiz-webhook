@@ -50,7 +50,7 @@ def init_db():
     """)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS CID_TABLE (
-    CID INTEGER,
+    CID TEXT,
     Trans_id TEXT
     )
     """)
@@ -189,7 +189,7 @@ def notify_esim():
         })
     
     esim_data=data.get("data", {})
-    cid= esim_data.get("cid")
+    cid= str(esim_data.get("cid"))
     qrcode_type = esim_data.get("qrcodeType")
     qrcode = esim_data.get("qrcode")
     plan_code = esim_data.get("planCode")
@@ -234,6 +234,7 @@ def notify_esim():
     logging.info(f"訂購esim成功 order_id={order_id} trans_id={trans_id}")
 
     send_order_email(email, qrcode_url, cid, full_title, qty_index, order_id, order_id_for_close_cyberbiz)
+    check_and_close_order(order_id, order_id_for_close_cyberbiz)
     return jsonify({"code": "000", "mesg": "success"})
     
 def add_text_to_QRcode(qrcode_url, product_name):
@@ -342,7 +343,6 @@ def send_order_email(to_email, qrcode_url, cid, product_name,qty_index,order_id 
     
         server.send_message(msg)
         logging.info(f"Email ({qty_index}) sent!")
-        close_cyberbiz_order(order_id_for_close_cyberbiz)
 
         server.quit()
         
@@ -354,6 +354,23 @@ CYBERBIZ_USERNAME = "ekzL3c-xypTQ8GJfPi5boF2oPz5TE7xCnfwp8tvf0pY"
 CYBERBIZ_SECRET = b"IltgWm2sNwJpoAOYJkT0V3bUI78nYX9HhSgykFe4_-E"
 CYBERBIZ_TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3NzE5OTU3MDcsInNob3BfaWQiOjI3NTU0LCJzaG9wX2RvbWFpbiI6Ind1Z2UuY3liZXJiaXouY28ifQ.t9BwXuJkJm0U3BIOwvEpfXi895uvnh_m68ZYvpw7UKo"
 
+def check_and_close_order(order_id, order_id_for_close_cyberbiz):
+    conn = sqlite3.connect("orders.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT COUNT(*) FROM orders
+        WHERE order_id = ? AND status != 'completed'
+    """, (order_id,))
+    
+    remaining = cursor.fetchone()[0]
+    conn.close()
+
+    if remaining == 0:
+        logging.info(f"訂單 {order_id} 全部完成，準備結案")
+        close_cyberbiz_order(order_id_for_close_cyberbiz)
+    else:
+        logging.info(f"訂單 {order_id} 尚未完成，剩餘 {remaining} 筆")
 def close_cyberbiz_order(order_id:int):
     
     url_base = "https://app-store-api.cyberbiz.io"
