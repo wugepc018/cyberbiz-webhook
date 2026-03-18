@@ -15,6 +15,7 @@ from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 from email.mime.application import MIMEApplication
 from PIL import Image, ImageDraw, ImageFont
+from urllib.parse import urlencode
 import logging
 import time
 import uuid
@@ -45,7 +46,9 @@ def init_db():
     qc TEXT,
     Title TEXT,
     qty_index INTEGER,
-    order_id_for_close_cyberbiz INTEGER
+    order_id_for_close_cyberbiz INTEGER,
+    NOTE TEXT,
+    line_items_id TEXT
     )
     """)
     cursor.execute("""
@@ -74,6 +77,7 @@ def cyberbiz_order():
     email = data.get("customer", {}).get("email")
     order_id = data.get("order_number")
     order_id_for_close_cyberbiz = data.get("id")
+    note=data.get("note")
     created_at=data.get("created_at")
     logging.info(f"Order ID: {order_id}")
     logging.info(f"客戶email: {email}")
@@ -98,19 +102,21 @@ def cyberbiz_order():
         else:
             title=item.get("title")
             product_id=item.get("product_id")
+            line_items_id=item.get("id")
             variant_title=item.get("variant_title")
             logging.info(f"Product ID: {product_id}")
             logging.info(f"廠商編號: {qc}")
             logging.info(f"產品名稱: {title}")
             logging.info(f"產品類型: {variant_title}")
             logging.info(f"產品代號: {sku}")
+            logging.info(f"備註欄位: {note}")
             trans_id = str(uuid.uuid4()).replace("-", "")[:20]
             auto_count += 1 
             qty_index = existing_count + auto_count
             full_title = f"{title} {variant_title}" if variant_title else title
             cursor.execute(
-                "INSERT INTO orders (order_id, Created_AT, Trans_id, PlanCode, email, product_id, qc, status, Title, qty_index, order_id_for_close_cyberbiz) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                (order_id, created_at, trans_id, sku, email, product_id, qc, "pending", full_title, qty_index , order_id_for_close_cyberbiz)
+                "INSERT INTO orders (order_id, Created_AT, Trans_id, PlanCode, email, product_id, qc, status, Title, qty_index, order_id_for_close_cyberbiz, NOTE, line_items_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (order_id, created_at, trans_id, sku, email, product_id, qc, "pending", full_title, qty_index , order_id_for_close_cyberbiz, note, line_items_id)
             )
             tasks.append((order_id, sku, email, trans_id, order_id_for_close_cyberbiz))
             
@@ -364,13 +370,60 @@ def check_and_close_order(order_id, order_id_for_close_cyberbiz):
     """, (order_id,))
     
     remaining = cursor.fetchone()[0]
-    conn.close()
-
-    if remaining == 0:
-        logging.info(f"訂單 {order_id} 全部完成，準備結案")
-        close_cyberbiz_order(order_id_for_close_cyberbiz)
-    else:
+    if remaining > 0:
         logging.info(f"訂單 {order_id} 尚未完成，剩餘 {remaining} 筆")
+        conn.close()
+        return
+    else:
+        cursor.execute("""
+            SELECT line_items_id, email
+            FROM orders
+            WHERE order_id = ?
+        """, (order_id,))
+        rows = cursor.fetchall()
+        line_item_ids = [r[0] for r in rows]
+        email = rows[0][1]
+        conn.close()
+        logging.info(f"訂單 {order_id} 全部完成，準備結案")
+        change_cyberbiz_order_status(order_id, line_item_ids, email)
+        close_cyberbiz_order(order_id_for_close_cyberbiz)
+        
+def change_cyberbiz_order_status(order_id:int, line_item_ids:list, email):
+    
+    url_base = "https://app-store-api.cyberbiz.io"
+    url_path = f"/v1/orders/{order_id}/fulfillments/support_shipping"
+    url = url_base + url_path
+    x_date = time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime())
+    line_item_str = ",".join(str(i) for i in line_item_ids)
+    
+    payload = {
+    "email": email,
+    "line_item_ids": line_item_str,
+    "source": "ezcat",
+    "size": "60",
+    "temperature": "normal",
+    "fridge_or_frozen": "none",
+    "is_fragile": "true"
+    }
+    encoded_body = urlencode(payload)
+
+    digest = "SHA-256=" + base64.b64encode(hashlib.sha256(encoded_body.encode()).digest()).decode()
+    
+    logging.info(f"secret length: {len(CYBERBIZ_SECRET)}")
+    logging.info(f"secret preview: {CYBERBIZ_SECRET[:5]}")
+    headers = {
+        "X-Date": x_date,
+        "Digest": digest,
+        "Authorization": f"Bearer {CYBERBIZ_TOKEN}",
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+    logging.info(f"x_date: {x_date}")
+    logging.info(f"digest: {digest}")
+    try:
+        response = requests.post(url, headers=headers, data=encoded_body, timeout=10)
+        logging.info(f"Cyberbiz 結案 order_id={order_id} response={response.text}")
+    except Exception as e:
+        logging.error(f"Cyberbiz 結案失敗 order_id={order_id}: {e}")
 def close_cyberbiz_order(order_id:int):
     
     url_base = "https://app-store-api.cyberbiz.io"
@@ -406,7 +459,7 @@ def orders():
     conn = sqlite3.connect("orders.db")
     cursor = conn.cursor()
     cursor.execute("""
-    SELECT o.order_id, o.Created_AT, o.PlanCode, o.email, o.status, o.qc, o.Title, c.CID
+    SELECT o.order_id, o.Created_AT, o.PlanCode, o.email, o.status, o.qc, o.Title, o.NOTE, c.CID
     FROM orders o
     LEFT JOIN CID_TABLE c ON o.Trans_id = c.Trans_id
     ORDER BY o.rowid DESC
@@ -441,10 +494,11 @@ def orders():
                 <th>PlanCode</th>
                 <th>廠商代號</th>
                 <th>狀態</th>
+                <th>備註</th>
             </tr>
     """
     for row in rows:
-        order_id, create_at, plan_code, email, status, qc, title, cid = row
+        order_id, create_at, plan_code, email, status, qc, title, cid, note = row
         amount=1
         html += f"""
         <tr>
@@ -457,6 +511,7 @@ def orders():
             <td>{plan_code}</td>
             <td>{qc}</td>
             <td class="{status}">{status}</td>
+            <td>{note}</td>
         </tr>
         """
 
