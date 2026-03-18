@@ -58,6 +58,9 @@ def init_db():
     Trans_id TEXT
     )
     """)
+    
+    cursor.execute("""ALTER TABLE orders ADD COLUMN NOTE TEXT;
+        ALTER TABLE orders ADD COLUMN line_items_id TEXT;""")
     conn.commit()
     conn.close()
 init_db()
@@ -460,7 +463,7 @@ def orders():
     conn = sqlite3.connect("orders.db")
     cursor = conn.cursor()
     cursor.execute("""
-    SELECT o.order_id, o.Created_AT, o.PlanCode, o.email, o.status, o.qc, o.Title, o.NOTE, c.CID
+    SELECT o.order_id, o.Created_AT, o.PlanCode, o.email, o.status, o.qc, o.Title, c.CID,  o.NOTE
     FROM orders o
     LEFT JOIN CID_TABLE c ON o.Trans_id = c.Trans_id
     ORDER BY o.rowid DESC
