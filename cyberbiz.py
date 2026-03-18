@@ -52,15 +52,16 @@ def init_db():
     line_items_id TEXT
     )
     """)
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS CID_TABLE (
-    CID TEXT,
-    Trans_id TEXT
-    )
-    """)
+    cursor.execute("PRAGMA table_info(orders)")
+    columns=[col[1] for col in cursor.fetchall()]
     
-    cursor.execute("""ALTER TABLE orders ADD COLUMN NOTE TEXT;
-        ALTER TABLE orders ADD COLUMN line_items_id TEXT;""")
+   
+    if "NOTE" not in columns:
+        cursor.execute("""ALTER TABLE orders ADD COLUMN NOTE TEXT""")
+
+    if "line_items_id" not in columns:
+        cursor.execute("ALTER TABLE orders ADD COLUMN line_items_id TEXT")
+
     conn.commit()
     conn.close()
 init_db()
