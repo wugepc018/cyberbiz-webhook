@@ -57,7 +57,7 @@ def init_db():
     
    
     if "NOTE" not in columns:
-        cursor.execute("""ALTER TABLE orders ADD COLUMN NOTE TEXT""")
+        cursor.execute("ALTER TABLE orders ADD COLUMN NOTE TEXT")
 
     if "line_items_id" not in columns:
         cursor.execute("ALTER TABLE orders ADD COLUMN line_items_id TEXT")
