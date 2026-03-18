@@ -482,44 +482,46 @@ def orders():
         
     rows = cursor.fetchall()
     conn.close()
-    html = """
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <title>訂單報表</title>
-        <style>
-            body { font-family: Arial, sans-serif; padding: 20px; }
-            table { border-collapse: collapse; width: 100%; }
-            th, td { border: 1px solid #ccc; padding: 8px; text-align: left; font-size: 13px; }
-            th { background: #f0f0f0; }
-            .completed { color: green; }
-            .processing { color: orange; }
-            .pending { color: gray; }
-        </style>
-    </head>
-    <body>
-        <h2>訂單報表</h2>
+    html = f"""
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>訂單報表</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; padding: 20px; }}
+                table {{ border-collapse: collapse; width: 100%; }}
+                th, td {{ border: 1px solid #ccc; padding: 8px; text-align: left; font-size: 13px; }}
+                th {{ background: #f0f0f0; }}
+                .completed {{ color: green; }}
+                .processing {{ color: orange; }}
+                .pending {{ color: gray; }}
+            </style>
+        </head>
+        <body>
+            <h2>訂單報表</h2>
+
             <form method="get" action="/orders" style="margin-bottom:20px;">
                 <input type="text" name="order_id" placeholder="輸入訂單單號" 
-                value="{order_id_query if order_id_query else ''}"
-                style="padding:5px; width:200px;">
+                    value="{order_id_query if order_id_query else ''}"
+                    style="padding:5px; width:200px;">
                 <button type="submit">搜尋</button>
                 <a href="/orders"><button type="button">清除</button></a>
             </form>
-        <table>
-            <tr>
-                <th>訂購日期</th>
-                <th>e-mail</th>
-                <th>訂單單號</th>
-                <th>數量</th>
-                <th>CID</th>
-                <th>金額</th>
-                <th>PlanCode</th>
-                <th>廠商代號</th>
-                <th>狀態</th>
-                <th>備註</th>
-            </tr>
-    """
+
+            <table>
+                <tr>
+                    <th>訂購日期</th>
+                    <th>e-mail</th>
+                    <th>訂單單號</th>
+                    <th>數量</th>
+                    <th>CID</th>
+                    <th>金額</th>
+                    <th>PlanCode</th>
+                    <th>廠商代號</th>
+                    <th>狀態</th>
+                    <th>備註</th>
+                </tr>
+        """
     for row in rows:
         order_id, create_at, plan_code, email, status, qc, title, cid, note = row
         amount=1
