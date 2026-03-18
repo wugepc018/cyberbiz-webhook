@@ -505,7 +505,6 @@ def orders():
                     value="{order_id_query if order_id_query else ''}"
                     style="padding:5px; width:200px;">
                 <button type="submit">搜尋</button>
-                <a href="/orders"><button type="button">清除</button></a>
             </form>
 
             <table>
