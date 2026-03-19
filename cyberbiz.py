@@ -598,7 +598,7 @@ def test_line_items():
     conn = sqlite3.connect("orders.db")
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT line_items_id, status
+        SELECT Trans_id, line_items_id, status
         FROM orders
         WHERE order_id = ?
     """, (order_id_query,))
@@ -608,12 +608,12 @@ def test_line_items():
     if not rows:
         return f"訂單 {order_id_query} 找不到任何資料"
 
-    line_item_ids = [r[0] for r in rows]
+    Trans_id = [r[0] for r in rows]
     statuses = [r[1] for r in rows]
 
     return f"""
     訂單: {order_id_query} <br>
-    line_item_ids: {line_item_ids} <br>
+    Trans_id: {Trans_id} <br>
     狀態: {statuses} <br>
     可以用這些 line_item_ids 測試 Cyberbiz API
     """
