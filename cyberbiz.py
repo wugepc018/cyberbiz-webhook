@@ -182,7 +182,7 @@ def order_esim(order_id, planCode, email, trans_id , order_id_for_close_cyberbiz
             
     except Exception as e:
         logging.error(f"呼叫供應商API失敗: {e}")
-        
+#接收供應商傳來的esim資訊
 @app.route("/notify/esim/plan/subscribe", methods=["POST"])
 def notify_esim():
     
@@ -277,6 +277,7 @@ def add_text_to_QRcode(qrcode_url, product_name):
     img_byte.seek(0)
     
     return img_byte.read()
+
 def send_order_email(to_email, qrcode_url, cid, product_name,qty_index,order_id ,order_id_for_close_cyberbiz):
     
     from_email = "wuge.esim@gmail.com"
@@ -426,9 +427,10 @@ def change_cyberbiz_order_status(order_id:int, line_item_ids:list, email):
     logging.info(f"digest: {digest}")
     try:
         response = requests.post(url, headers=headers, data=encoded_body, timeout=10)
-        logging.info(f"Cyberbiz 結案 order_id={order_id} response={response.text}")
+        logging.info(f"Cyberbiz 更改 order_id={order_id}狀態為已出貨 response={response.text}")
     except Exception as e:
-        logging.error(f"Cyberbiz 結案失敗 order_id={order_id}: {e}")
+        logging.error(f"Cyberbiz 更改 order_id={order_id}:狀態為失敗 {e}")
+        
 def close_cyberbiz_order(order_id:int):
     
     url_base = "https://app-store-api.cyberbiz.io"
@@ -456,7 +458,7 @@ def close_cyberbiz_order(order_id:int):
     
 @app.route("/test_close")
 def test_close():
-    close_cyberbiz_order(49579775)
+    change_cyberbiz_order_status(49579775)
     return "done"
     
 @app.route("/orders")
