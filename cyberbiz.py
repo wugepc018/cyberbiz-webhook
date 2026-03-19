@@ -47,6 +47,7 @@ def init_db():
     qc TEXT,
     Title TEXT,
     qty_index INTEGER,
+    QUANTITY INTEGER,
     order_id_for_close_cyberbiz INTEGER,
     NOTE TEXT,
     line_items_id TEXT
@@ -62,6 +63,8 @@ def init_db():
     if "line_items_id" not in columns:
         cursor.execute("ALTER TABLE orders ADD COLUMN line_items_id TEXT")
         
+    if "QUANTITY" not in columns:
+        cursor.execute("ALTER TABLE orders ADD COLUMN QUANTITY INTEGER")   
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS CID_TABLE (
         CID TEXT,
@@ -115,22 +118,29 @@ def cyberbiz_order():
             product_id=item.get("product_id")
             line_items_id=item.get("id")
             variant_title=item.get("variant_title")
+            quantity=item.get("quantity")
             logging.info(f"Product ID: {product_id}")
             logging.info(f"廠商編號: {qc}")
             logging.info(f"產品名稱: {title}")
             logging.info(f"產品類型: {variant_title}")
             logging.info(f"產品代號: {sku}")
             logging.info(f"備註欄位: {note}")
-            trans_id = str(uuid.uuid4()).replace("-", "")[:20]
-            auto_count += 1 
-            qty_index = existing_count + auto_count
+            logging.info(f"商品數量: {quantity}")
             full_title = f"{title} {variant_title}" if variant_title else title
-            cursor.execute(
-                "INSERT INTO orders (order_id, Created_AT, Trans_id, PlanCode, email, product_id, qc, status, Title, qty_index, order_id_for_close_cyberbiz, NOTE, line_items_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (order_id, created_at, trans_id, sku, email, product_id, qc, "pending", full_title, qty_index , order_id_for_close_cyberbiz, note, line_items_id)
-            )
-            tasks.append((order_id, sku, email, trans_id, order_id_for_close_cyberbiz))
-            
+            for i in range(quantity):  # ← 展開成多筆
+                auto_count += 1 
+                qty_index = existing_count + auto_count
+                trans_id = str(uuid.uuid4()).replace("-", "")[:20]
+                cursor.execute(
+                    """INSERT INTO orders 
+                    (order_id, Created_AT, Trans_id, PlanCode, email, product_id, qc, 
+                        status, Title, qty_index, QUANTITY, order_id_for_close_cyberbiz, NOTE, line_items_id) 
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (order_id, created_at, trans_id, sku, email, product_id, qc,
+                    "pending", full_title, qty_index, quantity, order_id_for_close_cyberbiz, note, line_items_id)
+                )
+                tasks.append((order_id, sku, email, trans_id))
+
     conn.commit()
     conn.close()
     
@@ -143,8 +153,9 @@ def cyberbiz_order():
     
 #訂購esim
 Base_URL="https://neware.biz"
-def order_esim(order_id, planCode, email, trans_id , order_id_for_close_cyberbiz):
+def order_esim(order_id, planCode, email , trans_id):
     RSP_SUBSCRIBE_API=f"{Base_URL}/openapi/esim/plan/subscribe"
+
     timestamp = str(int(time.time() * 1000))  
     raw = APP_ID + trans_id + timestamp + APP_SECRET
     ciphertext = hashlib.md5(raw.encode()).hexdigest()
@@ -226,7 +237,7 @@ def notify_esim():
     conn = sqlite3.connect("orders.db")
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT email, Title, order_id, qty_index, order_id_for_close_cyberbiz 
+        SELECT email, Title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id
         FROM orders 
         WHERE Trans_id = ? AND status = 'processing'
     """, (trans_id,))
@@ -237,20 +248,39 @@ def notify_esim():
         logging.error(f"找不到 trans_id={trans_id} 對應的訂單")
         return jsonify({"code": "999", "mesg": "Failed"})
     
-    cursor.execute("INSERT INTO CID_TABLE (CID, Trans_id) VALUES (?, ?)", (cid, trans_id))
-    email, full_title, order_id, qty_index, order_id_for_close_cyberbiz= row
+    email, full_title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id= row
 
     cursor.execute(
         "UPDATE orders SET status='completed', qrcode=? WHERE Trans_id=?",
         (qrcode_url, trans_id)
     )
-
-    conn.commit()
-    conn.close()
+    cursor.execute(
+        "INSERT INTO CID_TABLE (CID, Trans_id) VALUES (?, ?)", (cid, trans_id)
+    )
     
-    logging.info(f"訂購esim成功 order_id={order_id} trans_id={trans_id}")
+    conn.commit()
+    
+    cursor.execute("""
+        SELECT COUNT(*) FROM orders
+        WHERE order_id = ? AND line_items_id = ? AND status != 'completed'
+    """, (order_id, line_items_id))
+    
+    remaining_in_item = cursor.fetchone()[0]
+    if remaining_in_item == 0:
+        cursor.execute("""SELECT qrcode, qty_index FROM orders
+            WHERE order_id = ? AND line_items_id = ?
+            ORDER BY qty_index ASC
+        """, (order_id, line_items_id))
+        qrcode_rows = cursor.fetchall()
+        qrcode_list = [r[0] for r in qrcode_rows]
+        conn.close()
+        logging.info(f"line_items_id={line_items_id} 全部完成，寄送含 {len(qrcode_list)} 張 QR code 的信")
+        send_order_email(email, qrcode_list, full_title)
+    else:
+        conn.close()
+        logging.info(f"line_items_id={line_items_id} 尚有 {remaining_in_item} 筆未完成，等待中")
 
-    send_order_email(email, qrcode_url, cid, full_title, qty_index, order_id, order_id_for_close_cyberbiz)
+    logging.info(f"訂購esim成功 order_id={order_id} trans_id={trans_id}")
     check_and_close_order(order_id, order_id_for_close_cyberbiz)
     return jsonify({"code": "000", "mesg": "success"})
     
@@ -284,7 +314,7 @@ def add_text_to_QRcode(qrcode_url, product_name):
     
     return img_byte.read()
 
-def send_order_email(to_email, qrcode_url, cid, product_name,qty_index,order_id ,order_id_for_close_cyberbiz):
+def send_order_email(to_email, qrcode_url_list, product_name):
     
     from_email = "wuge.esim@gmail.com"
     app_password = "xbes bgfm sadp sidt"
@@ -308,11 +338,18 @@ def send_order_email(to_email, qrcode_url, cid, product_name,qty_index,order_id 
         
             
         msg=MIMEMultipart()
-        msg['Subject']=f"{product_name}（{qty_index}）"
+        msg['Subject']=f"{product_name}（共{len(qrcode_url_list)}張）"
         msg['From']=from_email
         msg['To'] = to_email
         
-        body_html = """
+        qrcode_html_blocks = ""
+        for idx, _ in enumerate(qrcode_url_list):
+            qrcode_html_blocks += f"""
+            <p><strong>第 {idx+1} 張 QR Code：</strong></p>
+            <img src="cid:qrcode_{idx}" style="width:220px;"><br><br>
+            """
+        
+        body_html = f"""
         <html>
         <body style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.8; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
 
@@ -340,28 +377,29 @@ def send_order_email(to_email, qrcode_url, cid, product_name,qty_index,order_id 
         <p>安裝使用有什麼問題，請洽我們 吳哥舖客服帳號【LINE ID】<strong>@uup3894y</strong><br>
         由於QR CODE 為數位複製品，無法做退換，還請多加注意</p>
         <p>
-        <img src="cid:qrcode" style="width:220px;">
+        {qrcode_html_blocks}
         </p>
         <p>謝謝你</p>
 
         </body>
         </html>
         """
+            
         msg.attach(MIMEText(body_html, "html"))
         with open(pdf_path, "rb") as f:
             pdf = MIMEApplication(f.read(), _subtype="pdf")
             pdf.add_header('Content-Disposition', 'attachment', filename="2026年版 ESIM 設定.pdf")
             msg.attach(pdf)
-    
-        img_data = add_text_to_QRcode(qrcode_url, product_name)
-        img=MIMEImage(img_data)
-        img.add_header("Content-ID", "<qrcode>")
-        img.add_header("Content-Disposition", "inline")
-        msg.attach(img)     
+
+        for idx, qrcode_url in enumerate(qrcode_url_list):
+            img_data = add_text_to_QRcode(qrcode_url, f"{product_name}（{idx+1}）")
+            img=MIMEImage(img_data)
+            img.add_header("Content-ID", f"<qrcode_{idx}>")
+            img.add_header("Content-Disposition", "inline")
+            msg.attach(img)     
     
         server.send_message(msg)
-        logging.info(f"Email ({qty_index}) sent!")
-
+        logging.info(f"Email sent for {product_name}，共 {len(qrcode_url_list)} 張 QR code")
         server.quit()
         
     except Exception as e:
@@ -388,7 +426,7 @@ def check_and_close_order(order_id, order_id_for_close_cyberbiz):
         return
     else:
         cursor.execute("""
-            SELECT line_items_id, email
+            SELECT DISTINCT line_items_id, email
             FROM orders
             WHERE order_id = ?
         """, (order_id,))
@@ -520,10 +558,11 @@ def orders():
                     <th>訂購日期</th>
                     <th>e-mail</th>
                     <th>訂單單號</th>
-                    <th>數量</th>
+                    <th>產品名稱</th>
                     <th>CID</th>
-                    <th>金額</th>
+                    <th>數量</th>
                     <th>PlanCode</th>
+                    <th>金額</th>
                     <th>廠商代號</th>
                     <th>狀態</th>
                     <th>備註</th>
