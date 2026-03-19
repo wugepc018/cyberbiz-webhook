@@ -50,7 +50,8 @@ def init_db():
     QUANTITY INTEGER,
     order_id_for_close_cyberbiz INTEGER,
     NOTE TEXT,
-    line_items_id TEXT
+    line_items_id TEXT,
+    PRICE
     )
     """)
     cursor.execute("PRAGMA table_info(orders)")
@@ -65,6 +66,9 @@ def init_db():
         
     if "QUANTITY" not in columns:
         cursor.execute("ALTER TABLE orders ADD COLUMN QUANTITY INTEGER")   
+        
+    if "PRICE" not in columns:
+        cursor.execute("ALTER TABLE orders ADD COLUMN PRICE INTEGER")   
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS CID_TABLE (
         CID TEXT,
@@ -119,6 +123,7 @@ def cyberbiz_order():
             line_items_id=item.get("id")
             variant_title=item.get("variant_title")
             quantity=item.get("quantity")
+            price=item.get("price")
             logging.info(f"Product ID: {product_id}")
             logging.info(f"廠商編號: {qc}")
             logging.info(f"產品名稱: {title}")
@@ -134,10 +139,10 @@ def cyberbiz_order():
                 cursor.execute(
                     """INSERT INTO orders 
                     (order_id, Created_AT, Trans_id, PlanCode, email, product_id, qc, 
-                        status, Title, qty_index, QUANTITY, order_id_for_close_cyberbiz, NOTE, line_items_id) 
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        status, Title, qty_index, QUANTITY, order_id_for_close_cyberbiz, NOTE, line_items_id, PRICE) 
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (order_id, created_at, trans_id, sku, email, product_id, qc,
-                    "pending", full_title, qty_index, quantity, order_id_for_close_cyberbiz, note, line_items_id)
+                    "pending", full_title, qty_index, quantity, order_id_for_close_cyberbiz, note, line_items_id, price)
                 )
                 tasks.append((order_id, sku, email, trans_id))
 
@@ -512,7 +517,7 @@ def orders():
     cursor = conn.cursor()
     if order_id_query:
         cursor.execute("""
-        SELECT o.order_id, o.Created_AT, o.PlanCode, o.email, o.status, o.qc, o.Title, c.CID, o.NOTE
+        SELECT o.order_id, o.Created_AT, o.PlanCode, o.email, o.status, o.qc, o.Title, c.CID, o.NOTE, o.PRICE
         FROM orders o
         LEFT JOIN CID_TABLE c ON o.Trans_id = c.Trans_id
         WHERE o.order_id = ?
@@ -520,7 +525,7 @@ def orders():
         """, (order_id_query,))
     else:
         cursor.execute("""
-        SELECT o.order_id, o.Created_AT, o.PlanCode, o.email, o.status, o.qc, o.Title, c.CID, o.NOTE
+        SELECT o.order_id, o.Created_AT, o.PlanCode, o.email, o.status, o.qc, o.Title, c.CID, o.NOTE, o.PRICE
         FROM orders o
         LEFT JOIN CID_TABLE c ON o.Trans_id = c.Trans_id
         ORDER BY o.rowid DESC
@@ -569,7 +574,7 @@ def orders():
                 </tr>
         """
     for row in rows:
-        order_id, create_at, plan_code, email, status, qc, title, cid, note = row
+        order_id, create_at, plan_code, email, status, qc, title, cid, note, cost = row
         amount=1
         html += f"""
         <tr>
@@ -580,6 +585,7 @@ def orders():
             <td>{cid}</td>
             <td>{amount}</td>
             <td>{plan_code}</td>
+            <td>{cost}</td>
             <td>{qc}</td>
             <td class="{status}">{status}</td>
             <td>{note}</td>
