@@ -550,6 +550,34 @@ def orders():
     html += "</table></body></html>"
     return html
 
+@app.route("/test_line_items")
+def test_line_items():
+    order_id_query = request.args.get("order_id")
+    if not order_id_query:
+        return "請提供 order_id，例如 /test_line_items?order_id=20263"
+
+    conn = sqlite3.connect("orders.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT line_items_id, status
+        FROM orders
+        WHERE order_id = ?
+    """, (order_id_query,))
+    rows = cursor.fetchall()
+    conn.close()
+
+    if not rows:
+        return f"訂單 {order_id_query} 找不到任何資料"
+
+    line_item_ids = [r[0] for r in rows]
+    statuses = [r[1] for r in rows]
+
+    return f"""
+    訂單: {order_id_query} <br>
+    line_item_ids: {line_item_ids} <br>
+    狀態: {statuses} <br>
+    可以用這些 line_item_ids 測試 Cyberbiz API
+    """
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=True)
