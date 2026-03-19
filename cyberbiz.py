@@ -123,7 +123,7 @@ def cyberbiz_order():
             line_items_id=item.get("id")
             variant_title=item.get("variant_title")
             quantity=item.get("quantity")
-            price=item.get("price")
+            price=float(item.get("price"))
             logging.info(f"Product ID: {product_id}")
             logging.info(f"廠商編號: {qc}")
             logging.info(f"產品名稱: {title}")
