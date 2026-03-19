@@ -563,8 +563,8 @@ def orders():
                 <select name="status" style="padding:5px;">
                     <option value="">全部狀態</option>
                     <option value="pending" {{ 'selected' if request.args.get('status') == 'pending' else '' }}>Pending</option>
-                    <option value="paid" {{ 'selected' if request.args.get('status') == 'processing' else '' }}>Processing</option>
-                    <option value="cancel" {{ 'selected' if request.args.get('status') == 'completed' else '' }}>Completed</option>
+                    <option value="processing" {{ 'selected' if request.args.get('status') == 'processing' else '' }}>Processing</option>
+                    <option value="completed" {{ 'selected' if request.args.get('status') == 'completed' else '' }}>Completed</option>
                 </select>
                 <button type="submit">搜尋</button>
             </form>
