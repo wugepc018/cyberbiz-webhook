@@ -280,7 +280,7 @@ def notify_esim():
         conn.close()
         logging.info(f"line_items_id={line_items_id} 尚有 {remaining_in_item} 筆未完成，等待中")
 
-    logging.info(f"訂購esim成功 order_id={order_id} trans_id={trans_id}")
+    logging.info(f"訂購esim完成 order_id={order_id} trans_id={trans_id}")
     check_and_close_order(order_id, order_id_for_close_cyberbiz)
     return jsonify({"code": "000", "mesg": "success"})
     
@@ -598,7 +598,7 @@ def test_line_items():
     conn = sqlite3.connect("orders.db")
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT Trans_id, line_items_id, status
+        SELECT Trans_id, status, line_items_id
         FROM orders
         WHERE order_id = ?
     """, (order_id_query,))
