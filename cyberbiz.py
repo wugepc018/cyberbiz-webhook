@@ -513,26 +513,31 @@ def test_close():
 @app.route("/orders")
 def orders():
     order_id_query = request.args.get("order_id")  
+    status_query = request.args.get("status")  
     conn = sqlite3.connect("orders.db")
     cursor = conn.cursor()
+    sql = """
+        SELECT o.order_id, o.Created_AT, o.PlanCode, o.email, o.status, o.qc, o.Title, c.CID, o.NOTE, o.PRICE
+        FROM orders o
+        LEFT JOIN CID_TABLE c ON o.Trans_id = c.Trans_id
+        WHERE 1=1
+    """
+    params = []
+
     if order_id_query:
-        cursor.execute("""
-        SELECT o.order_id, o.Created_AT, o.PlanCode, o.email, o.status, o.qc, o.Title, c.CID, o.NOTE, o.PRICE
-        FROM orders o
-        LEFT JOIN CID_TABLE c ON o.Trans_id = c.Trans_id
-        WHERE o.order_id = ?
-        ORDER BY o.rowid DESC
-        """, (order_id_query,))
-    else:
-        cursor.execute("""
-        SELECT o.order_id, o.Created_AT, o.PlanCode, o.email, o.status, o.qc, o.Title, c.CID, o.NOTE, o.PRICE
-        FROM orders o
-        LEFT JOIN CID_TABLE c ON o.Trans_id = c.Trans_id
-        ORDER BY o.rowid DESC
-        """)
-        
+        sql += " AND o.order_id = ?"
+        params.append(order_id_query)
+
+    if status_query:
+        sql += " AND o.status = ?"
+        params.append(status_query)
+
+    sql += " ORDER BY o.rowid DESC"
+
+    cursor.execute(sql, params)
     rows = cursor.fetchall()
     conn.close()
+    
     html = f"""
         <html>
         <head>
@@ -555,6 +560,12 @@ def orders():
                 <input type="text" name="order_id" placeholder="輸入訂單單號" 
                     value="{order_id_query if order_id_query else ''}"
                     style="padding:5px; width:200px;">
+                <select name="status" style="padding:5px;">
+                    <option value="">全部狀態</option>
+                    <option value="pending" {{ 'selected' if request.args.get('status') == 'pending' else '' }}>Pending</option>
+                    <option value="paid" {{ 'selected' if request.args.get('status') == 'processing' else '' }}>Processing</option>
+                    <option value="cancel" {{ 'selected' if request.args.get('status') == 'completed' else '' }}>Completed</option>
+                </select>
                 <button type="submit">搜尋</button>
             </form>
 
