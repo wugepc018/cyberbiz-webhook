@@ -397,7 +397,7 @@ def check_and_close_order(order_id, order_id_for_close_cyberbiz):
         email = rows[0][1]
         conn.close()
         logging.info(f"訂單 {order_id} 全部完成，準備結案")
-        change_cyberbiz_order_status(order_id, line_item_ids, email)
+        change_cyberbiz_order_status(order_id_for_close_cyberbiz, line_item_ids, email)
         close_cyberbiz_order(order_id_for_close_cyberbiz)
         
 def change_cyberbiz_order_status(order_id:int, line_item_ids:list, email):
