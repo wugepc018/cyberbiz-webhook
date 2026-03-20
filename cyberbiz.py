@@ -446,19 +446,16 @@ def check_and_close_order(order_id, order_id_for_close_cyberbiz):
 def change_cyberbiz_order_status(order_id:int, line_item_ids:list, email):
     
     url_base = "https://app-store-api.cyberbiz.io"
-    url_path = f"/v1/orders/{order_id}/fulfillments/support_shipping"
+    url_path = f"/v1/orders/{order_id}/fulfillments/custom_shipping"
     url = url_base + url_path
     x_date = time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime())
     line_item_str = ",".join(str(i) for i in line_item_ids)
     
     payload = {
-    "email": email,
     "line_item_ids": line_item_str,
-    "source": "ezcat",
-    "size": "60",
-    "temperature": "normal",
-    "fridge_or_frozen": "none",
-    "is_fragile": "true"
+    "tracking_number": "ezcat",
+    "tracking_company" :"other",
+    "notify_customer": True
     }
     encoded_body = urlencode(payload)
 
@@ -514,6 +511,9 @@ def test_close():
 def orders():
     order_id_query = request.args.get("order_id")  
     status_query = request.args.get("status")  
+    title_query = request.args.get("title")  
+    date_from = request.args.get("date_from")  
+    date_to = request.args.get("date_to")      
     conn = sqlite3.connect("orders.db")
     cursor = conn.cursor()
     sql = """
@@ -532,6 +532,18 @@ def orders():
         sql += " AND o.status = ?"
         params.append(status_query)
 
+    if title_query:
+        sql += " AND o.Title LIKE = ?"
+        params.append(f"%{title_query}%")
+        
+    if date_from:
+        sql += " AND o.Created_AT >= ?"
+        params.append(date_from)
+
+    if date_to:
+        sql += " AND o.Created_AT <= ?"
+        params.append(date_to + "T23:59:59")  
+        
     sql += " ORDER BY o.rowid DESC"
 
     cursor.execute(sql, params)
@@ -557,15 +569,32 @@ def orders():
             <h2>訂單報表</h2>
 
             <form method="get" action="/orders" style="margin-bottom:20px;">
+            
                 <input type="text" name="order_id" placeholder="輸入訂單單號" 
                     value="{order_id_query if order_id_query else ''}"
                     style="padding:5px; width:200px;">
+                    
+                <input type="text" name="title" placeholder="輸入產品名稱" 
+                    value="{title_query if title_query else ''}"
+                    style="padding:5px; width:200px;">
+                    
                 <select name="status" style="padding:5px;">
                     <option value="">全部狀態</option>
-                    <option value="pending" {{ 'selected' if request.args.get('status') == 'pending' else '' }}>Pending</option>
-                    <option value="processing" {{ 'selected' if request.args.get('status') == 'processing' else '' }}>Processing</option>
-                    <option value="completed" {{ 'selected' if request.args.get('status') == 'completed' else '' }}>Completed</option>
+                    <option value="pending" { "selected" if status_query == 'pending' else '' }>Pending</option>
+                    <option value="processing" { "selected" if status_query == 'processing' else '' }>Processing</option>
+                    <option value="completed" { "selected" if status_query == 'completed' else '' }>Completed</option>
                 </select>
+                
+                <input type="date" name="date_from"
+                    value="{date_from or ''}"
+                    style="padding:5px;">
+                    
+                <span>～</span>
+                
+                <input type="date" name="date_to"
+                    value="{date_to or ''}"
+                    style="padding:5px;">
+                    
                 <button type="submit">搜尋</button>
             </form>
 
