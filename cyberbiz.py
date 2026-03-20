@@ -464,6 +464,7 @@ def orders():
     order_id_query = request.args.get("order_id")  
     status_query = request.args.get("status")  
     title_query = request.args.get("title")  
+    Vendor_query = request.args.get("vendor")  
     date_from = request.args.get("date_from")  
     date_to = request.args.get("date_to")  
     page = int(request.args.get("page", 1)) 
@@ -490,6 +491,10 @@ def orders():
         sql += " AND o.Title LIKE ?"
         params.append(f"%{title_query}%")
         
+    if Vendor_query:
+        sql += " AND o.qc = ?"
+        params.append(Vendor_query)
+        
     if date_from:
         sql += " AND o.Created_AT >= ?"
         params.append(date_from)
@@ -499,10 +504,37 @@ def orders():
         params.append(date_to + "T23:59:59")  
         
     sql += " ORDER BY o.rowid DESC"
+    count_sql = f"SELECT COUNT(*) FROM ({sql})"
+    cursor.execute(count_sql, params)
+    total = cursor.fetchone()[0]
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    sql += " LIMIT ? OFFSET ?"
+    params.append(per_page)
+    params.append((page - 1) * per_page)
 
     cursor.execute(sql, params)
     rows = cursor.fetchall()
     conn.close()
+    def build_url(p):
+        args = {
+            "order_id": order_id_query or "",
+            "status": status_query or "",
+            "title": title_query or "",
+            "vendor": Vendor_query or "",
+            "date_from": date_from or "",
+            "date_to": date_to or "",
+            "page": p
+        }
+        return "/orders?" + "&".join(f"{k}={v}" for k, v in args.items() if v != "")
+
+    pagination = f'<div style="margin:12px 0; font-size:13px;">共 {total} 筆　第 {page} / {total_pages} 頁　'
+    if page > 1:
+        pagination += f'<a href="{build_url(1)}" style="margin:0 3px; padding:2px 8px; border:1px solid #ccc; border-radius:3px; text-decoration:none;">«</a>'
+        pagination += f'<a href="{build_url(page-1)}" style="margin:0 3px; padding:2px 8px; border:1px solid #ccc; border-radius:3px; text-decoration:none;">上一頁</a>'
+    if page < total_pages:
+        pagination += f'<a href="{build_url(page+1)}" style="margin:0 3px; padding:2px 8px; border:1px solid #ccc; border-radius:3px; text-decoration:none;">下一頁</a>'
+        pagination += f'<a href="{build_url(total_pages)}" style="margin:0 3px; padding:2px 8px; border:1px solid #ccc; border-radius:3px; text-decoration:none;">»</a>'
+    pagination += '</div>'
     
     html = f"""
         <html>
@@ -519,6 +551,7 @@ def orders():
                 .pending {{ color: gray; }}
             </style>
         </head>
+        
         <body>
             <h2>訂單報表</h2>
 
@@ -530,6 +563,10 @@ def orders():
                     
                 <input type="text" name="title" placeholder="輸入產品名稱" 
                     value="{title_query if title_query else ''}"
+                    style="padding:5px; width:200px;">
+                    
+                <input type="text" name="vendor" placeholder="輸入廠商代號" 
+                    value="{Vendor_query if Vendor_query else ''}"
                     style="padding:5px; width:200px;">
                     
                 <select name="status" style="padding:5px;">
@@ -552,7 +589,7 @@ def orders():
                 <button type="submit">搜尋</button>
                 <a href="/orders" style="padding:5px 12px; text-decoration:none; border:1px solid #ccc; border-radius:3px;">清除</a>
             </form>
-
+            {pagination}
             <table>
                 <tr>
                     <th>訂購日期</th>
@@ -587,7 +624,7 @@ def orders():
         </tr>
         """
 
-    html += "</table></body></html>"
+    html += f"</table>{pagination}</body></html>"
     return html
 
 @app.route("/test_line_items")
