@@ -533,7 +533,7 @@ def orders():
         params.append(status_query)
 
     if title_query:
-        sql += " AND o.Title LIKE = ?"
+        sql += " AND o.Title LIKE ?"
         params.append(f"%{title_query}%")
         
     if date_from:
