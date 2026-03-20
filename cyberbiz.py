@@ -513,7 +513,9 @@ def orders():
     status_query = request.args.get("status")  
     title_query = request.args.get("title")  
     date_from = request.args.get("date_from")  
-    date_to = request.args.get("date_to")      
+    date_to = request.args.get("date_to")  
+    page = int(request.args.get("page", 1)) 
+    per_page = 20                                
     conn = sqlite3.connect("orders.db")
     cursor = conn.cursor()
     sql = """
@@ -596,6 +598,7 @@ def orders():
                     style="padding:5px;">
                     
                 <button type="submit">搜尋</button>
+                <a href="/orders" style="padding:5px 12px; text-decoration:none; border:1px solid #ccc; border-radius:3px;">清除</a>
             </form>
 
             <table>
