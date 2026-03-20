@@ -589,7 +589,6 @@ def orders():
                 <button type="submit">搜尋</button>
                 <a href="/orders" style="padding:5px 12px; text-decoration:none; border:1px solid #ccc; border-radius:3px;">清除</a>
             </form>
-            {pagination}
             <table>
                 <tr>
                     <th>訂購日期</th>
