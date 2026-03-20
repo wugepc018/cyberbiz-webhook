@@ -430,52 +430,9 @@ def check_and_close_order(order_id, order_id_for_close_cyberbiz):
         conn.close()
         return
     else:
-        cursor.execute("""
-            SELECT DISTINCT line_items_id, email
-            FROM orders
-            WHERE order_id = ?
-        """, (order_id,))
-        rows = cursor.fetchall()
-        line_item_ids = [r[0] for r in rows]
-        email = rows[0][1]
         conn.close()
         logging.info(f"訂單 {order_id} 全部完成，準備結案")
-        change_cyberbiz_order_status(order_id_for_close_cyberbiz, line_item_ids, email)
         close_cyberbiz_order(order_id_for_close_cyberbiz)
-        
-def change_cyberbiz_order_status(order_id:int, line_item_ids:list, email):
-    
-    url_base = "https://app-store-api.cyberbiz.io"
-    url_path = f"/v1/orders/{order_id}/fulfillments/custom_shipping"
-    url = url_base + url_path
-    x_date = time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime())
-    line_item_str = ",".join(str(i) for i in line_item_ids)
-    
-    payload = {
-    "line_item_ids": line_item_str,
-    "tracking_number": "ezcat",
-    "tracking_company" :"other",
-    "notify_customer": True
-    }
-    encoded_body = urlencode(payload)
-
-    digest = "SHA-256=" + base64.b64encode(hashlib.sha256(encoded_body.encode()).digest()).decode()
-    
-    logging.info(f"secret length: {len(CYBERBIZ_SECRET)}")
-    logging.info(f"secret preview: {CYBERBIZ_SECRET[:5]}")
-    headers = {
-        "X-Date": x_date,
-        "Digest": digest,
-        "Authorization": f"Bearer {CYBERBIZ_TOKEN}",
-        "Content-Type": "application/x-www-form-urlencoded"
-    }
-    logging.info(f"x_date: {x_date}")
-    logging.info(f"digest: {digest}")
-    try:
-        response = requests.post(url, headers=headers, data=encoded_body, timeout=10)
-        logging.info(f"Cyberbiz 更改 order_id={order_id}狀態為已出貨 response={response.text}")
-    except Exception as e:
-        logging.error(f"Cyberbiz 更改 order_id={order_id}:狀態為失敗 {e}")
         
 def close_cyberbiz_order(order_id:int):
     
@@ -501,11 +458,6 @@ def close_cyberbiz_order(order_id:int):
         logging.info(f"Cyberbiz 結案 order_id={order_id} response={response.text}")
     except Exception as e:
         logging.error(f"Cyberbiz 結案失敗 order_id={order_id}: {e}")
-    
-@app.route("/test_close")
-def test_close():
-    change_cyberbiz_order_status(49579775)
-    return "done"
     
 @app.route("/orders")
 def orders():
