@@ -207,7 +207,7 @@ def order_esim(order_id, planCode, email , trans_id):
             conn.close()
             
     except Exception as e:
-        logging.error(f"呼叫供應商API失敗: {e}")
+        logging.error(f"呼叫供應商API失敗 order_id={order_id} trans_id={trans_id} error={e}", exc_info=True)
 #接收供應商傳來的esim資訊
 @app.route("/notify/esim/plan/subscribe", methods=["POST"])
 def notify_esim():
