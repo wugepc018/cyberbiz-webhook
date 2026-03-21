@@ -196,6 +196,7 @@ def order_esim(order_id, planCode, email , trans_id):
             logging.info(f"訂購請求成功 order_id={order_id} planCode={planCode} trans_id={trans_id}")
         
         else:
+            logging.error(f"訂購請求失敗 order_id={order_id} planCode={planCode} trans_id={trans_id} response={response.json()}") 
             conn = sqlite3.connect("orders.db")
             cursor = conn.cursor()
             cursor.execute(
