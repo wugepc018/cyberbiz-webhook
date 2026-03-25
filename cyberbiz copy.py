@@ -29,8 +29,11 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 AUTO_VENDOR = ["AUTO001", "AUTO002"]
-APP_ID = "xtH7XEyey9Mv"
-APP_SECRET = "ECA021C324614BBC9CDE22BC3BC805AB"
+APP_ID = os.environ.get("APP_ID")
+APP_SECRET = os.environ.get("APP_SECRET")
+CYBERBIZ_USERNAME = os.environ.get("CYBERBIZ_USERNAME")
+CYBERBIZ_SECRET = os.environ.get("CYBERBIZ_SECRET", "").encode()
+CYBERBIZ_TOKEN = os.environ.get("CYBERBIZ_TOKEN")
 
 def init_db():
     conn = sqlite3.connect("orders.db")
@@ -464,7 +467,7 @@ def add_text_to_QRcode(qrcode_url, product_name):
 def send_order_email(to_email, qrcode_url, cid, product_name,qty_index,order_id ,order_id_for_close_cyberbiz):
     
     from_email = "wuge.esim@gmail.com"
-    app_password = "xbes bgfm sadp sidt"
+    app_password = os.environ.get("GMAIL_PASSWORD")
     pdf_path = "/root/app/cyberbiz-webhook/2026年版 ESIM 設定.pdf"
 
     try:
@@ -532,11 +535,6 @@ def send_order_email(to_email, qrcode_url, cid, product_name,qty_index,order_id 
         
     except Exception as e:
         logging.info(f"Send email failed: {e}")
-
-
-CYBERBIZ_USERNAME = "ekzL3c-xypTQ8GJfPi5boF2oPz5TE7xCnfwp8tvf0pY"
-CYBERBIZ_SECRET = b"IltgWm2sNwJpoAOYJkT0V3bUI78nYX9HhSgykFe4_-E"
-CYBERBIZ_TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3NzE5OTU3MDcsInNob3BfaWQiOjI3NTU0LCJzaG9wX2RvbWFpbiI6Ind1Z2UuY3liZXJiaXouY28ifQ.t9BwXuJkJm0U3BIOwvEpfXi895uvnh_m68ZYvpw7UKo"
 
 def check_and_close_order(order_id, order_id_for_close_cyberbiz):
     conn = sqlite3.connect("orders.db")

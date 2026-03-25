@@ -27,56 +27,59 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 AUTO_VENDOR = ["AUTO001", "AUTO002"]
-APP_ID = "xtH7XEyey9Mv"
-APP_SECRET = "ECA021C324614BBC9CDE22BC3BC805AB"
+APP_ID = os.environ.get("APP_ID")
+APP_SECRET = os.environ.get("APP_SECRET")
+CYBERBIZ_USERNAME = os.environ.get("CYBERBIZ_USERNAME")
+CYBERBIZ_SECRET = os.environ.get("CYBERBIZ_SECRET", "").encode()
+CYBERBIZ_TOKEN = os.environ.get("CYBERBIZ_TOKEN")
 
 def init_db():
-    conn = sqlite3.connect("orders.db")
-    cursor = conn.cursor()
-    print("DB PATH:", os.path.abspath("orders.db"))
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS orders (
-    order_id TEXT,
-    Created_AT,
-    Trans_id TEXT,
-    product_id TEXT,
-    PlanCode TEXT,
-    email TEXT,
-    status TEXT,
-    qrcode TEXT,
-    qc TEXT,
-    Title TEXT,
-    qty_index INTEGER,
-    QUANTITY INTEGER,
-    order_id_for_close_cyberbiz INTEGER,
-    NOTE TEXT,
-    line_items_id TEXT,
-    PRICE
-    )
-    """)
-    cursor.execute("PRAGMA table_info(orders)")
-    columns=[col[1] for col in cursor.fetchall()]
+    with sqlite3.connect("orders.db") as conn:
+        cursor = conn.cursor()
+        print("DB PATH:", os.path.abspath("orders.db"))
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS orders (
+        order_id TEXT,
+        Created_AT,
+        Trans_id TEXT,
+        product_id TEXT,
+        PlanCode TEXT,
+        email TEXT,
+        status TEXT,
+        qrcode TEXT,
+        qc TEXT,
+        Title TEXT,
+        qty_index INTEGER,
+        QUANTITY INTEGER,
+        order_id_for_close_cyberbiz INTEGER,
+        NOTE TEXT,
+        line_items_id TEXT,
+        PRICE
+        )
+        """)
+        cursor.execute("PRAGMA table_info(orders)")
+        columns=[col[1] for col in cursor.fetchall()]
+        
     
-   
-    if "NOTE" not in columns:
-        cursor.execute("ALTER TABLE orders ADD COLUMN NOTE TEXT")
+        if "NOTE" not in columns:
+            cursor.execute("ALTER TABLE orders ADD COLUMN NOTE TEXT")
 
-    if "line_items_id" not in columns:
-        cursor.execute("ALTER TABLE orders ADD COLUMN line_items_id TEXT")
-        
-    if "QUANTITY" not in columns:
-        cursor.execute("ALTER TABLE orders ADD COLUMN QUANTITY INTEGER")   
-        
-    if "PRICE" not in columns:
-        cursor.execute("ALTER TABLE orders ADD COLUMN PRICE INTEGER")   
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS CID_TABLE (
-        CID TEXT,
-        Trans_id TEXT
-    )
-    """)
-    conn.commit()
-    conn.close()
+        if "line_items_id" not in columns:
+            cursor.execute("ALTER TABLE orders ADD COLUMN line_items_id TEXT")
+            
+        if "QUANTITY" not in columns:
+            cursor.execute("ALTER TABLE orders ADD COLUMN QUANTITY INTEGER")   
+            
+        if "PRICE" not in columns:
+            cursor.execute("ALTER TABLE orders ADD COLUMN PRICE INTEGER")   
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS CID_TABLE (
+            CID TEXT,
+            Trans_id TEXT
+        )
+        """)
+        conn.commit()
+      
 init_db()
 app = Flask(__name__)
 
@@ -100,57 +103,60 @@ def cyberbiz_order():
     logging.info(f"Order ID: {order_id}")
     logging.info(f"客戶email: {email}")
     
-    conn=sqlite3.connect("orders.db")
-    cursor=conn.cursor()
-    line_items = data.get("line_items", [])
-    tasks = []
-    auto_count = 0
-    cursor.execute("SELECT COUNT(*) FROM orders WHERE order_id = ?", (order_id,))
-    existing_count = cursor.fetchone()[0]
-
-    for item in line_items:
-        qc=item.get("qc")
-        sku=item.get("sku")
-
-        if qc not in AUTO_VENDOR:
-            logging.info(f"訂單 {order_id} 含有非AUTO_VENDOR商品，整筆跳過")
-            logging.info(f"訂單 {order_id} 需要人工處理")
-            conn.close() 
+    with sqlite3.connect("orders.db") as conn:
+        cursor=conn.cursor()
+        line_items = data.get("line_items", [])
+        tasks = []
+        auto_count = 0
+        cursor.execute("SELECT COUNT(*) FROM orders WHERE order_id = ?", (order_id,))
+        
+        if cursor.fetchone()[0] > 0:
+            logging.info(f"訂單 {order_id} 已存在，略過重複處理")
             return jsonify({"status": "ok"})
-        else:
-            title=item.get("title")
-            product_id=item.get("product_id")
-            line_items_id=item.get("id")
-            variant_title=item.get("variant_title")
-            quantity=item.get("quantity")
-            try:
-                price = float(item.get("price") or 0)
-            except (TypeError, ValueError):
-                price = 0
-            logging.info(f"Product ID: {product_id}")
-            logging.info(f"廠商編號: {qc}")
-            logging.info(f"產品名稱: {title}")
-            logging.info(f"產品類型: {variant_title}")
-            logging.info(f"產品代號: {sku}")
-            logging.info(f"備註欄位: {note}")
-            logging.info(f"商品數量: {quantity}")
-            full_title = f"{title} {variant_title}" if variant_title else title
-            for i in range(quantity):  # ← 展開成多筆
-                auto_count += 1 
-                qty_index = existing_count + auto_count
-                trans_id = str(uuid.uuid4()).replace("-", "")[:20]
-                cursor.execute(
-                    """INSERT INTO orders 
-                    (order_id, Created_AT, Trans_id, PlanCode, email, product_id, qc, 
-                        status, Title, qty_index, QUANTITY, order_id_for_close_cyberbiz, NOTE, line_items_id, PRICE) 
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                    (order_id, created_at, trans_id, sku, email, product_id, qc,
-                    "pending", full_title, qty_index, quantity, order_id_for_close_cyberbiz, note, line_items_id, price)
-                )
-                tasks.append((order_id, sku, email, trans_id))
+        
+        existing_count = cursor.fetchone()[0]
 
-    conn.commit()
-    conn.close()
+        for item in line_items:
+            qc=item.get("qc")
+            sku=item.get("sku")
+
+            if qc not in AUTO_VENDOR:
+                logging.info(f"訂單 {order_id} 含有非AUTO_VENDOR商品，整筆跳過")
+                logging.info(f"訂單 {order_id} 需要人工處理")
+                return jsonify({"status": "ok"})
+            else:
+                title=item.get("title")
+                product_id=item.get("product_id")
+                line_items_id=item.get("id")
+                variant_title=item.get("variant_title")
+                quantity=item.get("quantity")
+                try:
+                    price = float(item.get("price") or 0)
+                except (TypeError, ValueError):
+                    price = 0
+                logging.info(f"Product ID: {product_id}")
+                logging.info(f"廠商編號: {qc}")
+                logging.info(f"產品名稱: {title}")
+                logging.info(f"產品類型: {variant_title}")
+                logging.info(f"產品代號: {sku}")
+                logging.info(f"備註欄位: {note}")
+                logging.info(f"商品數量: {quantity}")
+                full_title = f"{title} {variant_title}" if variant_title else title
+                for i in range(quantity):  # ← 展開成多筆
+                    auto_count += 1 
+                    qty_index = existing_count + auto_count
+                    trans_id = str(uuid.uuid4()).replace("-", "")[:20]
+                    cursor.execute(
+                        """INSERT INTO orders 
+                        (order_id, Created_AT, Trans_id, PlanCode, email, product_id, qc, 
+                            status, Title, qty_index, QUANTITY, order_id_for_close_cyberbiz, NOTE, line_items_id, PRICE) 
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        (order_id, created_at, trans_id, sku, email, product_id, qc,
+                        "pending", full_title, qty_index, quantity, order_id_for_close_cyberbiz, note, line_items_id, price)
+                    )
+                    tasks.append((order_id, sku, email, trans_id))
+
+        conn.commit()
     
     for task in tasks: 
         order_esim(*task)
@@ -168,15 +174,14 @@ def order_esim(order_id, planCode, email , trans_id):
     raw = APP_ID + trans_id + timestamp + APP_SECRET
     ciphertext = hashlib.md5(raw.encode()).hexdigest()
 
-    conn = sqlite3.connect("orders.db")
-    cursor = conn.cursor()
-    cursor.execute(
-        "UPDATE orders SET status = 'processing' WHERE Trans_id = ? AND status = 'pending'",
-        (trans_id,)
-    )
-    conn.commit()
-    conn.close()
-    
+    with sqlite3.connect("orders.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE orders SET status = 'processing' WHERE Trans_id = ? AND status = 'pending'",
+            (trans_id,)
+        )
+        conn.commit()
+        
     payload = {
         "planCode": planCode,
         "qrcodeType": 0,
@@ -197,18 +202,17 @@ def order_esim(order_id, planCode, email , trans_id):
         
         else:
             logging.error(f"訂購請求失敗 order_id={order_id} planCode={planCode} trans_id={trans_id} response={response.json()}") 
-            conn = sqlite3.connect("orders.db")
-            cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE orders SET status = 'pending' WHERE Trans_id = ?",
-                (trans_id,)
-            )
-            conn.commit()
-            conn.close()
+            with sqlite3.connect("orders.db") as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE orders SET status = 'pending' WHERE Trans_id = ?",
+                    (trans_id,)
+                )
+                conn.commit()
             
     except Exception as e:
         logging.error(f"呼叫供應商API失敗 order_id={order_id} trans_id={trans_id} error={e}", exc_info=True)
-#接收供應商傳來的esim資訊
+    #接收供應商傳來的esim資訊
 @app.route("/notify/esim/plan/subscribe", methods=["POST"])
 def notify_esim():
     
@@ -243,51 +247,51 @@ def notify_esim():
     else:
         qrcode_url = qrcode
     
-    conn = sqlite3.connect("orders.db")
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT email, Title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id
-        FROM orders 
-        WHERE Trans_id = ? AND status = 'processing'
-    """, (trans_id,))
-    
-    row = cursor.fetchone()
-    
-    if not row:
-        logging.error(f"找不到 trans_id={trans_id} 對應的訂單")
-        return jsonify({"code": "999", "mesg": "Failed"})
-    
-    email, full_title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id= row
+    with sqlite3.connect("orders.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT email, Title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id
+            FROM orders 
+            WHERE Trans_id = ? AND status = 'processing'
+        """, (trans_id,))
+        
+        row = cursor.fetchone()
+        
+        if not row:
+            logging.error(f"找不到 trans_id={trans_id} 對應的訂單")
+            return jsonify({"code": "999", "mesg": "Failed"})
+        
+        email, full_title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id= row
 
-    cursor.execute(
-        "UPDATE orders SET status='completed', qrcode=? WHERE Trans_id=?",
-        (qrcode_url, trans_id)
-    )
-    cursor.execute(
-        "INSERT INTO CID_TABLE (CID, Trans_id) VALUES (?, ?)", (cid, trans_id)
-    )
-    
-    conn.commit()
-    
-    cursor.execute("""
-        SELECT COUNT(*) FROM orders
-        WHERE order_id = ? AND line_items_id = ? AND status != 'completed'
-    """, (order_id, line_items_id))
-    
-    remaining_in_item = cursor.fetchone()[0]
-    if remaining_in_item == 0:
-        cursor.execute("""SELECT qrcode, qty_index FROM orders
-            WHERE order_id = ? AND line_items_id = ?
-            ORDER BY qty_index ASC
+        cursor.execute(
+            "UPDATE orders SET status='completed', qrcode=? WHERE Trans_id=?",
+            (qrcode_url, trans_id)
+        )
+        cursor.execute(
+            "INSERT INTO CID_TABLE (CID, Trans_id) VALUES (?, ?)", (cid, trans_id)
+        )
+        
+        conn.commit()
+        
+        cursor.execute("""
+            SELECT COUNT(*) FROM orders
+            WHERE order_id = ? AND line_items_id = ? AND status != 'completed'
         """, (order_id, line_items_id))
-        qrcode_rows = cursor.fetchall()
-        qrcode_list = [r[0] for r in qrcode_rows]
-        conn.close()
-        logging.info(f"line_items_id={line_items_id} 全部完成，寄送含 {len(qrcode_list)} 張 QR code 的信")
-        send_order_email(email, qrcode_list, full_title)
-    else:
-        conn.close()
-        logging.info(f"line_items_id={line_items_id} 尚有 {remaining_in_item} 筆未完成，等待中")
+        
+        remaining_in_item = cursor.fetchone()[0]
+        if remaining_in_item == 0:
+            cursor.execute("""SELECT qrcode, qty_index FROM orders
+                WHERE order_id = ? AND line_items_id = ?
+                ORDER BY qty_index ASC
+            """, (order_id, line_items_id))
+            qrcode_rows = cursor.fetchall()
+            qrcode_list = [r[0] for r in qrcode_rows]
+           
+            logging.info(f"line_items_id={line_items_id} 全部完成，寄送含 {len(qrcode_list)} 張 QR code 的信")
+            send_order_email(email, qrcode_list, full_title)
+        else:
+       
+            logging.info(f"line_items_id={line_items_id} 尚有 {remaining_in_item} 筆未完成，等待中")
 
     logging.info(f"訂購esim完成 order_id={order_id} trans_id={trans_id}")
     check_and_close_order(order_id, order_id_for_close_cyberbiz)
@@ -326,20 +330,8 @@ def add_text_to_QRcode(qrcode_url, product_name):
 def send_order_email(to_email, qrcode_url_list, product_name):
     
     from_email = "wuge.esim@gmail.com"
-    app_password = "xbes bgfm sadp sidt"
+    app_password = os.environ.get("GMAIL_PASSWORD")
     pdf_path = "/root/app/cyberbiz-webhook/2026年版 ESIM 設定.pdf"
-    '''
-    conn=sqlite3.connect("orders.db")
-    cursor=conn.cursor()
-    cursor.execute("SELECT title  FROM orders WHERE order_id = ?", (order_id,))
-    row = cursor.fetchone()
-    conn.close()
-
-    if not row:
-        logging.error(f"Order {order_id} not found in DB.")
-        return
-    title=row
-    '''
     try:
         server=smtplib.SMTP("smtp.gmail.com", 587)
         server.starttls()
@@ -414,29 +406,24 @@ def send_order_email(to_email, qrcode_url_list, product_name):
     except Exception as e:
         logging.info(f"Send email failed: {e}")
 
-
-CYBERBIZ_USERNAME = "ekzL3c-xypTQ8GJfPi5boF2oPz5TE7xCnfwp8tvf0pY"
-CYBERBIZ_SECRET = b"IltgWm2sNwJpoAOYJkT0V3bUI78nYX9HhSgykFe4_-E"
-CYBERBIZ_TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3NzE5OTU3MDcsInNob3BfaWQiOjI3NTU0LCJzaG9wX2RvbWFpbiI6Ind1Z2UuY3liZXJiaXouY28ifQ.t9BwXuJkJm0U3BIOwvEpfXi895uvnh_m68ZYvpw7UKo"
-
 def check_and_close_order(order_id, order_id_for_close_cyberbiz):
-    conn = sqlite3.connect("orders.db")
-    cursor = conn.cursor()
+    with sqlite3.connect("orders.db") as conn:
+        cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT COUNT(*) FROM orders
-        WHERE order_id = ? AND status != 'completed'
-    """, (order_id,))
-    
-    remaining = cursor.fetchone()[0]
-    if remaining > 0:
-        logging.info(f"訂單 {order_id} 尚未完成，剩餘 {remaining} 筆")
-        conn.close()
-        return
-    else:
-        conn.close()
-        logging.info(f"訂單 {order_id} 全部完成，準備結案")
-        close_cyberbiz_order(order_id_for_close_cyberbiz)
+        cursor.execute("""
+            SELECT COUNT(*) FROM orders
+            WHERE order_id = ? AND status != 'completed'
+        """, (order_id,))
+        
+        remaining = cursor.fetchone()[0]
+        if remaining > 0:
+            logging.info(f"訂單 {order_id} 尚未完成，剩餘 {remaining} 筆")
+           
+            return
+        else:
+          
+            logging.info(f"訂單 {order_id} 全部完成，準備結案")
+            close_cyberbiz_order(order_id_for_close_cyberbiz)
         
 def close_cyberbiz_order(order_id:int):
     
@@ -473,52 +460,52 @@ def orders():
     date_to = request.args.get("date_to")  
     page = int(request.args.get("page", 1)) 
     per_page = 20                                
-    conn = sqlite3.connect("orders.db")
-    cursor = conn.cursor()
-    sql = """
-        SELECT o.order_id, o.Created_AT, o.PlanCode, o.email, o.status, o.qc, o.Title, c.CID, o.NOTE, o.PRICE
-        FROM orders o
-        LEFT JOIN CID_TABLE c ON o.Trans_id = c.Trans_id
-        WHERE 1=1
-    """
-    params = []
+    with sqlite3.connect("orders.db") as conn:
+        cursor = conn.cursor()
+        sql = """
+            SELECT o.order_id, o.Created_AT, o.PlanCode, o.email, o.status, o.qc, o.Title, c.CID, o.NOTE, o.PRICE
+            FROM orders o
+            LEFT JOIN CID_TABLE c ON o.Trans_id = c.Trans_id
+            WHERE 1=1
+        """
+        params = []
 
-    if order_id_query:
-        sql += " AND o.order_id = ?"
-        params.append(order_id_query)
+        if order_id_query:
+            sql += " AND o.order_id = ?"
+            params.append(order_id_query)
 
-    if status_query:
-        sql += " AND o.status = ?"
-        params.append(status_query)
+        if status_query:
+            sql += " AND o.status = ?"
+            params.append(status_query)
 
-    if title_query:
-        sql += " AND o.Title LIKE ?"
-        params.append(f"%{title_query}%")
-        
-    if Vendor_query:
-        sql += " AND o.qc = ?"
-        params.append(Vendor_query)
-        
-    if date_from:
-        sql += " AND o.Created_AT >= ?"
-        params.append(date_from)
+        if title_query:
+            sql += " AND o.Title LIKE ?"
+            params.append(f"%{title_query}%")
+            
+        if Vendor_query:
+            sql += " AND o.qc = ?"
+            params.append(Vendor_query)
+            
+        if date_from:
+            sql += " AND o.Created_AT >= ?"
+            params.append(date_from)
 
-    if date_to:
-        sql += " AND o.Created_AT <= ?"
-        params.append(date_to + "T23:59:59")  
-        
-    sql += " ORDER BY o.rowid DESC"
-    count_sql = f"SELECT COUNT(*) FROM ({sql})"
-    cursor.execute(count_sql, params)
-    total = cursor.fetchone()[0]
-    total_pages = max(1, (total + per_page - 1) // per_page)
-    sql += " LIMIT ? OFFSET ?"
-    params.append(per_page)
-    params.append((page - 1) * per_page)
+        if date_to:
+            sql += " AND o.Created_AT <= ?"
+            params.append(date_to + "T23:59:59")  
+            
+        sql += " ORDER BY o.rowid DESC"
+        count_sql = f"SELECT COUNT(*) FROM ({sql})"
+        cursor.execute(count_sql, params)
+        total = cursor.fetchone()[0]
+        total_pages = max(1, (total + per_page - 1) // per_page)
+        sql += " LIMIT ? OFFSET ?"
+        params.append(per_page)
+        params.append((page - 1) * per_page)
 
-    cursor.execute(sql, params)
-    rows = cursor.fetchall()
-    conn.close()
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+     
     def build_url(p):
         args = {
             "order_id": order_id_query or "",
@@ -636,15 +623,14 @@ def test_line_items():
     if not order_id_query:
         return "請提供 order_id，例如 /test_line_items?order_id=20263"
 
-    conn = sqlite3.connect("orders.db")
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT Trans_id, status, line_items_id
-        FROM orders
-        WHERE order_id = ?
-    """, (order_id_query,))
-    rows = cursor.fetchall()
-    conn.close()
+    with sqlite3.connect("orders.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT Trans_id, status, line_items_id
+            FROM orders
+            WHERE order_id = ?
+        """, (order_id_query,))
+        rows = cursor.fetchall()
 
     if not rows:
         return f"訂單 {order_id_query} 找不到任何資料"
