@@ -1,0 +1,126 @@
+2026-03-25 15:46:34,452 [INFO] [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8080
+ * Running on http://172.18.32.128:8080
+2026-03-25 15:46:34,452 [INFO] [33mPress CTRL+C to quit[0m
+2026-03-25 15:46:34,454 [INFO]  * Restarting with stat
+2026-03-25 15:46:34,713 [WARNING]  * Debugger is active!
+2026-03-25 15:46:34,722 [INFO]  * Debugger PIN: 880-460-203
+2026-03-25 15:46:53,489 [INFO] 127.0.0.1 - - [25/Mar/2026 15:46:53] "GET / HTTP/1.1" 200 -
+2026-03-25 15:46:53,541 [INFO] 127.0.0.1 - - [25/Mar/2026 15:46:53] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-03-25 15:47:43,115 [INFO] Webhook received:
+2026-03-25 15:47:43,116 [INFO] {
+  "order_number": "TEST123",
+  "id": 999999,
+  "created_at": "2026-03-25",
+  "note": "測試訂單",
+  "customer": {
+    "email": "test@gmail.com",
+    "mobile": "0912345678"
+  },
+  "extra_info": "{\"使用日期\":\"2026/04/01\"}",
+  "line_items": [
+    {
+      "id": "item1",
+      "product_id": "p001",
+      "sku": "PLAN001",
+      "title": "日本eSIM",
+      "variant_title": "5天",
+      "qc": "AUTO002"
+    }
+  ]
+}
+2026-03-25 15:47:43,118 [INFO] Order ID: TEST123
+2026-03-25 15:47:43,118 [INFO] 客戶email: test@gmail.com
+2026-03-25 15:47:43,118 [INFO] 預計使用日期：1774972800
+2026-03-25 15:47:43,119 [INFO] Product ID: p001
+2026-03-25 15:47:43,119 [INFO] 廠商編號: AUTO002
+2026-03-25 15:47:43,119 [INFO] 產品名稱: 日本eSIM
+2026-03-25 15:47:43,119 [INFO] 產品類型: 5天
+2026-03-25 15:47:43,119 [INFO] 產品代號: PLAN001
+2026-03-25 15:47:43,119 [INFO] 備註欄位: 測試訂單
+2026-03-25 15:47:43,131 [INFO] 127.0.0.1 - - [25/Mar/2026 15:47:43] "[35m[1mPOST /webhook/cyberbiz/order HTTP/1.1[0m" 500 -
+2026-03-25 15:51:19,106 [INFO] [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8080
+ * Running on http://172.18.32.128:8080
+2026-03-25 15:51:19,106 [INFO] [33mPress CTRL+C to quit[0m
+2026-03-25 15:51:19,108 [INFO]  * Restarting with stat
+2026-03-25 15:51:19,440 [WARNING]  * Debugger is active!
+2026-03-25 15:51:19,449 [INFO]  * Debugger PIN: 880-460-203
+2026-03-25 15:51:20,060 [INFO] Webhook received:
+2026-03-25 15:51:20,060 [INFO] {
+  "order_number": "TEST123",
+  "id": 999999,
+  "created_at": "2026-03-25",
+  "note": "測試訂單",
+  "customer": {
+    "email": "test@gmail.com",
+    "mobile": "0912345678"
+  },
+  "extra_info": "{\"使用日期\":\"2026/04/01\"}",
+  "line_items": [
+    {
+      "id": "item1",
+      "product_id": "p001",
+      "sku": "PLAN001",
+      "title": "日本eSIM",
+      "variant_title": "5天",
+      "qc": "AUTO002"
+    }
+  ]
+}
+2026-03-25 15:51:20,063 [INFO] Order ID: TEST123
+2026-03-25 15:51:20,063 [INFO] 客戶email: test@gmail.com
+2026-03-25 15:51:20,063 [INFO] 預計使用日期：1774972800
+2026-03-25 15:51:20,064 [INFO] Product ID: p001
+2026-03-25 15:51:20,064 [INFO] 廠商編號: AUTO002
+2026-03-25 15:51:20,064 [INFO] 產品名稱: 日本eSIM
+2026-03-25 15:51:20,064 [INFO] 產品類型: 5天
+2026-03-25 15:51:20,064 [INFO] 產品代號: PLAN001
+2026-03-25 15:51:20,064 [INFO] 備註欄位: 測試訂單
+2026-03-25 15:51:20,074 [INFO] 127.0.0.1 - - [25/Mar/2026 15:51:20] "[35m[1mPOST /webhook/cyberbiz/order HTTP/1.1[0m" 500 -
+2026-03-25 15:57:41,768 [INFO] [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8080
+ * Running on http://172.18.32.128:8080
+2026-03-25 15:57:41,769 [INFO] [33mPress CTRL+C to quit[0m
+2026-03-25 15:57:41,771 [INFO]  * Restarting with stat
+2026-03-25 15:57:42,057 [WARNING]  * Debugger is active!
+2026-03-25 15:57:42,066 [INFO]  * Debugger PIN: 880-460-203
+2026-03-25 15:57:42,072 [INFO] Webhook received:
+2026-03-25 15:57:42,072 [INFO] {
+  "order_number": "TEST123",
+  "id": 999999,
+  "created_at": "2026-03-25",
+  "note": "測試訂單",
+  "customer": {
+    "email": "test@gmail.com",
+    "mobile": "0912345678"
+  },
+  "extra_info": "{\"使用日期\":\"2026/04/01\"}",
+  "line_items": [
+    {
+      "id": "item1",
+      "product_id": "p001",
+      "sku": "PLAN001",
+      "title": "日本eSIM",
+      "variant_title": "5天",
+      "qc": "AUTO002"
+    }
+  ]
+}
+2026-03-25 15:57:42,074 [INFO] Order ID: TEST123
+2026-03-25 15:57:42,074 [INFO] 客戶email: test@gmail.com
+2026-03-25 15:57:42,074 [INFO] 預計使用日期：1774972800
+2026-03-25 15:57:42,074 [INFO] Product ID: p001
+2026-03-25 15:57:42,074 [INFO] 廠商編號: AUTO002
+2026-03-25 15:57:42,074 [INFO] 產品名稱: 日本eSIM
+2026-03-25 15:57:42,074 [INFO] 產品類型: 5天
+2026-03-25 15:57:42,074 [INFO] 產品代號: PLAN001
+2026-03-25 15:57:42,074 [INFO] 備註欄位: 測試訂單
+2026-03-25 15:57:42,080 [INFO] 127.0.0.1 - - [25/Mar/2026 15:57:42] "[35m[1mPOST /webhook/cyberbiz/order HTTP/1.1[0m" 500 -
+2026-03-25 16:06:39,304 [INFO]  * Detected change in '/Users/user/Documents/GitHub/Automation_JOB/cyberbiz-webhook/cyberbiz copy.py', reloading
+2026-03-25 16:06:39,358 [INFO]  * Restarting with stat
+2026-03-25 16:06:39,684 [WARNING]  * Debugger is active!
+2026-03-25 16:06:39,690 [INFO]  * Debugger PIN: 880-460-203
