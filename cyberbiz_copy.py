@@ -21,6 +21,7 @@ import time
 import uuid
 import datetime
 import qrcode
+import threading
 
 #LOG_PATH = "/root/app/cyberbiz-webhook/logs/webhook.log"
 logging.basicConfig(
@@ -129,6 +130,7 @@ def cyberbiz_order():
         line_items = data.get("line_items", [])
         tasks = []
         auto_count = 0
+        cursor.execute("SELECT COUNT(*) FROM orders WHERE order_id = ?", (order_id,))
         existing_count = cursor.fetchone()[0]
         
         if existing_count > 0:
@@ -163,18 +165,16 @@ def cyberbiz_order():
                     "INSERT INTO orders (order_id, Created_AT, Trans_id, PlanCode, email, product_id, qc, status, Title, qty_index, order_id_for_close_cyberbiz, NOTE, line_items_id, USE_DATE, MOBILE_NUMBER) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (order_id, created_at, trans_id, sku, email, product_id, qc, "pending", full_title, qty_index , order_id_for_close_cyberbiz, note, line_items_id, use_date, mobile_number)
                 )
-                tasks.append((order_id, sku, email, trans_id, order_id_for_close_cyberbiz))
+                tasks.append((order_id, sku, email, trans_id, order_id_for_close_cyberbiz, qc))
                 
         conn.commit()
-    
-    if qc == "AUTO001":
-        handler = order_esim
         
-    elif qc == "AUTO002":
-        handler = FTC_order_esim
-
     for task in tasks:
-        handler(*task)
+        order_id_, sku_, email_, trans_id_, close_id_, qc_ = task
+        if qc_ == "AUTO001":
+            order_esim(order_id_, sku_, email_, trans_id_, close_id_)
+        elif qc_ == "AUTO002":
+            FTC_order_esim(order_id_, sku_, email_, trans_id_, close_id_)
             
     return jsonify({
         "status": "ok",
@@ -285,7 +285,9 @@ def FTC_order_esim(order_id, planCode, email, trans_id , order_id_for_close_cybe
                 )
                 conn.commit()
             
-            poll_lpa(trans_id, order_id_for_close_cyberbiz)
+            t = threading.Thread(target=poll_lpa, args=(trans_id, order_id_for_close_cyberbiz))
+            t.daemon = True
+            t.start()
         else:
             with sqlite3.connect("orders.db") as conn:
                 cursor = conn.cursor()
@@ -351,12 +353,13 @@ def poll_lpa(trans_id, order_id_for_close_cyberbiz):
         with sqlite3.connect("orders.db") as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT email, Title, order_id, qty_index, order_id_for_close_cyberbiz FROM orders WHERE Trans_id = ?'",
+                "SELECT email, Title, order_id, qty_index, order_id_for_close_cyberbiz FROM orders WHERE Trans_id = ?",
                 (trans_id,)
             )
             row = cursor.fetchone()
             email, full_title, order_id, qty_index, order_id_for_close_cyberbiz = row
             send_order_email(email, qrcode_url, cid, full_title, qty_index, order_id, order_id_for_close_cyberbiz)
+            check_and_close_order(order_id, order_id_for_close_cyberbiz)
             return
     
 def generate_qrcode(qrcodes_lpa):
