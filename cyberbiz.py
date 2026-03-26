@@ -110,6 +110,7 @@ def cyberbiz_order():
         auto_count = 0
         cursor.execute("SELECT COUNT(*) FROM orders WHERE order_id = ?", (order_id,))
         existing_count = cursor.fetchone()[0]
+        
         if existing_count > 0:
             logging.info(f"訂單 {order_id} 已存在，略過重複處理")
             return jsonify({"status": "ok"})

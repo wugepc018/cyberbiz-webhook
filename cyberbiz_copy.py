@@ -35,7 +35,7 @@ APP_SECRET = os.environ.get("APP_SECRET")
 CYBERBIZ_USERNAME = os.environ.get("CYBERBIZ_USERNAME")
 CYBERBIZ_SECRET = os.environ.get("CYBERBIZ_SECRET", "").encode()
 CYBERBIZ_TOKEN = os.environ.get("CYBERBIZ_TOKEN")
-FTC_API_KEY=os.environ.get("x-api-key")
+FTC_API_KEY=os.environ.get("x_api_key")
 
 def init_db():
     with sqlite3.connect("orders.db") as conn:
