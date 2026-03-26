@@ -25,8 +25,7 @@ import threading
 
 #LOG_PATH = "/root/app/cyberbiz-webhook/logs/webhook.log"
 logging.basicConfig(
-    #filename="/root/app/cyberbiz-webhook/logs/webhook.log",
-    filename="webhook.log",
+    filename="/root/app/cyberbiz-webhook/logs/webhook.log",
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
