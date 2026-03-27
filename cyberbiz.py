@@ -19,6 +19,9 @@ from urllib.parse import urlencode
 import logging
 import time
 import uuid
+import datetime
+import qrcode
+import threading
 
 #LOG_PATH = "/root/app/cyberbiz-webhook/logs/webhook.log"
 logging.basicConfig(
@@ -32,6 +35,7 @@ APP_SECRET = os.environ.get("APP_SECRET")
 CYBERBIZ_USERNAME = os.environ.get("CYBERBIZ_USERNAME")
 CYBERBIZ_SECRET = os.environ.get("CYBERBIZ_SECRET", "").encode()
 CYBERBIZ_TOKEN = os.environ.get("CYBERBIZ_TOKEN")
+FTC_API_KEY=os.environ.get("x_api_key")
 
 def init_db():
     with sqlite3.connect("orders.db") as conn:
@@ -40,7 +44,7 @@ def init_db():
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS orders (
         order_id TEXT,
-        Created_AT,
+        Created_AT TEXT,
         Trans_id TEXT,
         product_id TEXT,
         PlanCode TEXT,
@@ -54,7 +58,10 @@ def init_db():
         order_id_for_close_cyberbiz INTEGER,
         NOTE TEXT,
         line_items_id TEXT,
-        PRICE
+        PRICE INTEGER,
+        USE_DATE INTEGER,
+        MOBILE_NUMBER INTEGER,
+        CUSTOMER_NAME TEXT
         )
         """)
         cursor.execute("PRAGMA table_info(orders)")
@@ -66,12 +73,22 @@ def init_db():
 
         if "line_items_id" not in columns:
             cursor.execute("ALTER TABLE orders ADD COLUMN line_items_id TEXT")
+        
+        if "USE_DATE" not in columns:
+            cursor.execute("ALTER TABLE orders ADD COLUMN USE_DATE INTEGER")
+        
+        if "MOBILE_NUMBER" not in columns:
+            cursor.execute("ALTER TABLE orders ADD COLUMN MOBILE_NUMBER INTEGER")
             
-        if "QUANTITY" not in columns:
-            cursor.execute("ALTER TABLE orders ADD COLUMN QUANTITY INTEGER")   
-            
+        if "Created_AT" not in columns:
+            cursor.execute("ALTER TABLE orders ADD COLUMN Created_AT TEXT")
+        
+        if "CUSTOMER_NAME" not in columns:
+            cursor.execute("ALTER TABLE orders ADD COLUMN CUSTOMER_NAME TEXT")
+        
         if "PRICE" not in columns:
-            cursor.execute("ALTER TABLE orders ADD COLUMN PRICE INTEGER")   
+            cursor.execute("ALTER TABLE orders ADD COLUMN PRICE INTEGER")
+            
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS CID_TABLE (
             CID TEXT,
@@ -79,7 +96,7 @@ def init_db():
         )
         """)
         conn.commit()
-      
+        
 init_db()
 app = Flask(__name__)
 
@@ -96,12 +113,27 @@ def cyberbiz_order():
     logging.info(json.dumps(data, indent=2, ensure_ascii=False))
     
     email = data.get("customer", {}).get("email")
+    mobile_number = data.get("customer", {}).get("mobile")
+    Customer_name = data.get("customer", {}).get("name")
     order_id = data.get("order_number")
     order_id_for_close_cyberbiz = data.get("id")
     note=data.get("note")
     created_at=data.get("created_at")
+    extra_info_str = data.get("extra_info", "{}")
+
+    try:
+        extra_info = json.loads(extra_info_str)
+        use_date_str = extra_info.get("使用日期", "")
+        
+        if use_date_str:
+            use_date = int(datetime.datetime.strptime(use_date_str, "%Y/%m/%d").timestamp())
+        else:
+            use_date = None
+    except (json.JSONDecodeError, TypeError, ValueError):
+        use_date = None
     logging.info(f"Order ID: {order_id}")
     logging.info(f"客戶email: {email}")
+    logging.info(f"預計使用日期：{use_date}")
     
     with sqlite3.connect("orders.db") as conn:
         cursor=conn.cursor()
@@ -139,36 +171,38 @@ def cyberbiz_order():
                 logging.info(f"產品類型: {variant_title}")
                 logging.info(f"產品代號: {sku}")
                 logging.info(f"備註欄位: {note}")
-                logging.info(f"商品數量: {quantity}")
                 full_title = f"{title} {variant_title}" if variant_title else title
-                for i in range(quantity):  # ← 展開成多筆
+                for i in range(quantity):
+                    trans_id = str(uuid.uuid4()).replace("-", "")[:20]
                     auto_count += 1 
                     qty_index = existing_count + auto_count
-                    trans_id = str(uuid.uuid4()).replace("-", "")[:20]
                     cursor.execute(
                         """INSERT INTO orders 
-                        (order_id, Created_AT, Trans_id, PlanCode, email, product_id, qc, 
-                            status, Title, qty_index, QUANTITY, order_id_for_close_cyberbiz, NOTE, line_items_id, PRICE) 
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                        (order_id, created_at, trans_id, sku, email, product_id, qc,
-                        "pending", full_title, qty_index, quantity, order_id_for_close_cyberbiz, note, line_items_id, price)
+                            (order_id, Created_AT, Trans_id, PlanCode, email, product_id, qc, 
+                                status, Title, qty_index, QUANTITY, order_id_for_close_cyberbiz, NOTE, line_items_id, PRICE, USE_DATE, MOBILE_NUMBER, CUSTOMER_NAME ) 
+                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                            (order_id, created_at, trans_id, sku, email, product_id, qc,
+                            "pending", full_title, qty_index, quantity, order_id_for_close_cyberbiz, note, line_items_id, price, use_date, mobile_number, Customer_name)
                     )
-                    tasks.append((order_id, sku, email, trans_id))
-
+                    tasks.append((order_id, sku, email, trans_id, order_id_for_close_cyberbiz, qc))
+                
         conn.commit()
-    
-    for task in tasks: 
-        order_esim(*task)
         
+    for task in tasks:
+        order_id_, sku_, email_, trans_id_, close_id_, qc_ = task
+        if qc_ == "AUTO001":
+            order_esim(order_id_, sku_, email_, trans_id_, close_id_)
+        elif qc_ == "AUTO002":
+            FTC_order_esim(order_id_, sku_, email_, trans_id_, close_id_)
+            
     return jsonify({
         "status": "ok",
     })
     
-#訂購esim
+#RSP的訂購esim api
 Base_URL="https://neware.biz"
-def order_esim(order_id, planCode, email , trans_id):
+def order_esim(order_id, planCode, email, trans_id , order_id_for_close_cyberbiz):
     RSP_SUBSCRIBE_API=f"{Base_URL}/openapi/esim/plan/subscribe"
-
     timestamp = str(int(time.time() * 1000))  
     raw = APP_ID + trans_id + timestamp + APP_SECRET
     ciphertext = hashlib.md5(raw.encode()).hexdigest()
@@ -180,7 +214,7 @@ def order_esim(order_id, planCode, email , trans_id):
             (trans_id,)
         )
         conn.commit()
-        
+    
     payload = {
         "planCode": planCode,
         "qrcodeType": 0,
@@ -200,7 +234,6 @@ def order_esim(order_id, planCode, email , trans_id):
             logging.info(f"訂購請求成功 order_id={order_id} planCode={planCode} trans_id={trans_id}")
         
         else:
-            logging.error(f"訂購請求失敗 order_id={order_id} planCode={planCode} trans_id={trans_id} response={response.json()}") 
             with sqlite3.connect("orders.db") as conn:
                 cursor = conn.cursor()
                 cursor.execute(
@@ -210,8 +243,176 @@ def order_esim(order_id, planCode, email , trans_id):
                 conn.commit()
             
     except Exception as e:
-        logging.error(f"呼叫供應商API失敗 order_id={order_id} trans_id={trans_id} error={e}", exc_info=True)
-    #接收供應商傳來的esim資訊
+        logging.error(f"呼叫供應商API失敗: {e}")
+        
+#FTC的訂購esim api        
+def FTC_order_esim(order_id, planCode, email, trans_id , order_id_for_close_cyberbiz):
+    FTC_SUBSCRIBE_API="https://zdfjzyhdcl.execute-api.ap-northeast-1.amazonaws.com/prod/v1/create"
+    timestamp = str(int(time.time()))  
+    
+
+    with sqlite3.connect("orders.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT MOBILE_NUMBER, CUSTOMER_NAME, USE_DATE FROM orders WHERE Trans_id = ? AND status = 'pending'",
+            (trans_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            logging.error(f"找不到 trans_id={trans_id}")
+            return
+
+        mobile_number, customer_name, selectDate = row
+        
+        conn.commit()
+    
+    payload = {
+        "type": "esim",
+        "orderId": trans_id,
+        "email": email,
+        "buyerEmail":email,
+        "buyerName": customer_name,
+        "buyerMobile": mobile_number,
+        "createDate":timestamp,
+        "buyerAddress":None,
+        "selectDate":selectDate,
+        "selectLocation":None,
+        "deliveryType":None,
+        "orderLine":[
+            {
+                "orderLineId":"1",
+                "productId":planCode,
+                "quantity":1
+            },
+            
+        ]
+    }
+    headers = {
+    "Content-Type": "application/json",
+    "x-api-key": FTC_API_KEY 
+    }
+    try:
+        response=requests.post(FTC_SUBSCRIBE_API,json=payload,headers=headers,timeout=10)
+        
+        if response.json().get("code")=="200":
+            logging.info(f"訂購請求成功 order_id={order_id} planCode={planCode} trans_id={trans_id}")
+            
+            with sqlite3.connect("orders.db") as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE orders SET status = 'processing' WHERE Trans_id = ?",
+                    (trans_id,)
+                )
+                conn.commit()
+            
+            t = threading.Thread(target=poll_lpa, args=(trans_id, order_id_for_close_cyberbiz))
+            t.daemon = True
+            t.start()
+        else:
+            with sqlite3.connect("orders.db") as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE orders SET status = 'pending' WHERE Trans_id = ?",
+                    (trans_id,)
+                )
+                conn.commit()
+            logging.error(f"訂購請求失敗 {response.text}")
+            
+    except Exception as e:
+        logging.error(f"呼叫供應商API失敗: {e}")
+
+def query_lpa(trans_id):
+    FTC_GET_ESIM_URL="https://zdfjzyhdcl.execute-api.ap-northeast-1.amazonaws.com/prod/v1/getInfo"
+    
+    params={
+        "orderId":trans_id
+    }
+    headers = {
+    "Content-Type": "application/json",
+    "x-api-key": FTC_API_KEY #等拿到再換
+    }
+    response=requests.get(FTC_GET_ESIM_URL, params=params, headers=headers, timeout=10)
+    data=response.json()
+    if data.get("code")==200:
+        for order in data.get("data", []):
+            for line in order.get("orderLine", []):
+                product_id = line.get("productId")
+                codes = line.get("code", [])
+                cids = line.get("cid", [])
+                logging.info(f"成功拿到esim資訊 product_id: {product_id} QRCODE_LPA: {codes} cid: {cids}")
+                return product_id, codes, cids
+                
+    else:
+        logging.info(f"沒有拿到esim資訊 {response.text}")
+    
+        
+def poll_lpa(trans_id, order_id_for_close_cyberbiz):
+    qrcode_list=[]
+    for i in range(144):
+        result = query_lpa(trans_id)
+
+        if not result:
+            time.sleep(600)
+            continue
+
+        product_id, qrcodes_lpa, cid = result
+        
+        lpa = qrcodes_lpa[0]
+        cid = cid[0]
+        qrcode_url=generate_qrcode(lpa)
+        qrcode_list.append(qrcode_url)
+        with sqlite3.connect("orders.db") as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT email, Title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id
+                FROM orders 
+                WHERE Trans_id = ? AND status = 'processing'
+            """, (trans_id,))
+            row = cursor.fetchone()
+            email, full_title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id= row
+            
+            cursor.execute(
+            "INSERT INTO CID_TABLE (CID, Trans_id) VALUES (?, ?)", (cid, trans_id)
+            )
+            cursor.execute(
+            "UPDATE orders SET status='completed', qrcode=? WHERE Trans_id=?",
+            (qrcode_url, trans_id)
+            )
+            conn.commit()
+            cursor.execute("""
+            SELECT COUNT(*) FROM orders
+            WHERE order_id = ? AND line_items_id = ? AND status != 'completed'
+        """, (order_id, line_items_id))
+        
+            remaining_in_item = cursor.fetchone()[0]
+            if remaining_in_item == 0:
+                
+                cursor.execute("""SELECT qrcode, qty_index FROM orders
+                    WHERE order_id = ? AND line_items_id = ?
+                    ORDER BY qty_index ASC
+                """, (order_id, line_items_id))
+                
+                qrcode_rows = cursor.fetchall()
+                qrcode_list = [r[0] for r in qrcode_rows]
+            
+                logging.info(f"line_items_id={line_items_id} 全部完成，寄送含 {len(qrcode_list)} 張 QR code 的信")
+                send_order_email(email, qrcode_list, full_title)
+            else:
+        
+                logging.info(f"line_items_id={line_items_id} 尚有 {remaining_in_item} 筆未完成，等待中")
+
+        logging.info(f"訂購esim完成 order_id={order_id} trans_id={trans_id}")
+        check_and_close_order(order_id, order_id_for_close_cyberbiz)
+def generate_qrcode(qrcodes_lpa):
+    img = qrcode.make(qrcodes_lpa)
+      
+    imgByte=io.BytesIO()
+    img.save(imgByte, format="PNG")
+    imgByte.seek(0)
+
+    return imgByte.read()
+    
+#接收供應商傳來的esim資訊
 @app.route("/notify/esim/plan/subscribe", methods=["POST"])
 def notify_esim():
     
@@ -297,8 +498,11 @@ def notify_esim():
     return jsonify({"code": "000", "mesg": "success"})
     
 def add_text_to_QRcode(qrcode_url, product_name):
-    response = requests.get(qrcode_url)
-    img = Image.open(io.BytesIO(response.content))
+    if isinstance(qrcode_url, bytes):
+        img=Image.open(io.BytesIO(qrcode_url))
+    else:
+        response = requests.get(qrcode_url)
+        img = Image.open(io.BytesIO(response.content))
     
     header_height = 60
     footer_height = 40
@@ -404,7 +608,7 @@ def send_order_email(to_email, qrcode_url_list, product_name):
         
     except Exception as e:
         logging.info(f"Send email failed: {e}")
-
+        
 def check_and_close_order(order_id, order_id_for_close_cyberbiz):
     with sqlite3.connect("orders.db") as conn:
         cursor = conn.cursor()
@@ -448,6 +652,7 @@ def close_cyberbiz_order(order_id:int):
         logging.info(f"Cyberbiz 結案 order_id={order_id} response={response.text}")
     except Exception as e:
         logging.error(f"Cyberbiz 結案失敗 order_id={order_id}: {e}")
+    
     
 @app.route("/orders")
 def orders():
@@ -625,24 +830,25 @@ def test_line_items():
     with sqlite3.connect("orders.db") as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT Trans_id, status, line_items_id
+            SELECT line_items_id, status
             FROM orders
             WHERE order_id = ?
         """, (order_id_query,))
         rows = cursor.fetchall()
+ 
 
-    if not rows:
-        return f"訂單 {order_id_query} 找不到任何資料"
+        if not rows:
+            return f"訂單 {order_id_query} 找不到任何資料"
 
-    Trans_id = [r[0] for r in rows]
-    statuses = [r[1] for r in rows]
+        line_item_ids = [r[0] for r in rows]
+        statuses = [r[1] for r in rows]
 
-    return f"""
-    訂單: {order_id_query} <br>
-    Trans_id: {Trans_id} <br>
-    狀態: {statuses} <br>
-    可以用這些 line_item_ids 測試 Cyberbiz API
-    """
+        return f"""
+        訂單: {order_id_query} <br>
+        line_item_ids: {line_item_ids} <br>
+        狀態: {statuses} <br>
+        可以用這些 line_item_ids 測試 Cyberbiz API
+        """
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=True)
