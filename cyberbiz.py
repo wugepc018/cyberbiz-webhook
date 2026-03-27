@@ -38,7 +38,7 @@ CYBERBIZ_TOKEN = os.environ.get("CYBERBIZ_TOKEN")
 FTC_API_KEY=os.environ.get("x_api_key")
 
 def init_db():
-    with sqlite3.connect("orders.db") as conn:
+    with sqlite3.connect("orders.db", timeout=30) as conn:
         cursor = conn.cursor()
         print("DB PATH:", os.path.abspath("orders.db"))
         cursor.execute("""
@@ -135,7 +135,7 @@ def cyberbiz_order():
     logging.info(f"客戶email: {email}")
     logging.info(f"預計使用日期：{use_date}")
     
-    with sqlite3.connect("orders.db") as conn:
+    with sqlite3.connect("orders.db", timeout=30) as conn:
         cursor=conn.cursor()
         line_items = data.get("line_items", [])
         tasks = []
@@ -162,7 +162,7 @@ def cyberbiz_order():
                 variant_title=item.get("variant_title")
                 quantity=item.get("quantity")
                 try:
-                    price = float(item.get("price") or 0)
+                    price = item.get("price") or 0
                 except (TypeError, ValueError):
                     price = 0
                 logging.info(f"Product ID: {product_id}")
@@ -209,7 +209,7 @@ def order_esim(order_id, planCode, email, trans_id , order_id_for_close_cyberbiz
     raw = APP_ID + trans_id + timestamp + APP_SECRET
     ciphertext = hashlib.md5(raw.encode()).hexdigest()
 
-    with sqlite3.connect("orders.db") as conn:
+    with sqlite3.connect("orders.db", timeout=30) as conn:
         cursor = conn.cursor()
         cursor.execute(
             "UPDATE orders SET status = 'processing' WHERE Trans_id = ? AND status = 'pending'",
@@ -237,7 +237,7 @@ def order_esim(order_id, planCode, email, trans_id , order_id_for_close_cyberbiz
         
         else:
             logging.error(f"供應商回應失敗 code={response.json().get('code')} 內容={response.text}") 
-            with sqlite3.connect("orders.db") as conn:
+            with sqlite3.connect("orders.db", timeout=30) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     "UPDATE orders SET status = 'pending' WHERE Trans_id = ?",
@@ -254,7 +254,7 @@ def FTC_order_esim(order_id, planCode, email, trans_id , order_id_for_close_cybe
     timestamp = str(int(time.time()))  
     
 
-    with sqlite3.connect("orders.db") as conn:
+    with sqlite3.connect("orders.db", timeout=30) as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT MOBILE_NUMBER, CUSTOMER_NAME, USE_DATE FROM orders WHERE Trans_id = ? AND status = 'pending'",
@@ -300,7 +300,7 @@ def FTC_order_esim(order_id, planCode, email, trans_id , order_id_for_close_cybe
         if response.json().get("code")=="200":
             logging.info(f"訂購請求成功 order_id={order_id} planCode={planCode} trans_id={trans_id}")
             
-            with sqlite3.connect("orders.db") as conn:
+            with sqlite3.connect("orders.db", timeout=30) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     "UPDATE orders SET status = 'processing' WHERE Trans_id = ?",
@@ -312,7 +312,7 @@ def FTC_order_esim(order_id, planCode, email, trans_id , order_id_for_close_cybe
             t.daemon = True
             t.start()
         else:
-            with sqlite3.connect("orders.db") as conn:
+            with sqlite3.connect("orders.db", timeout=30) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     "UPDATE orders SET status = 'pending' WHERE Trans_id = ?",
@@ -359,12 +359,13 @@ def poll_lpa(trans_id, order_id_for_close_cyberbiz):
             continue
 
         product_id, qrcodes_lpa, cid = result
-        
+        if not qrcodes_lpa or not cid:
+            continue
         lpa = qrcodes_lpa[0]
         cid = cid[0]
         qrcode_url=generate_qrcode(lpa)
         qrcode_list.append(qrcode_url)
-        with sqlite3.connect("orders.db") as conn:
+        with sqlite3.connect("orders.db", timeout=30) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT email, Title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id
@@ -372,6 +373,9 @@ def poll_lpa(trans_id, order_id_for_close_cyberbiz):
                 WHERE Trans_id = ? AND status = 'processing'
             """, (trans_id,))
             row = cursor.fetchone()
+            if not row:
+                logging.error(f"找不到 processing 訂單 {trans_id}")
+                return
             email, full_title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id= row
             
             cursor.execute(
@@ -390,16 +394,23 @@ def poll_lpa(trans_id, order_id_for_close_cyberbiz):
             remaining_in_item = cursor.fetchone()[0]
             if remaining_in_item == 0:
                 
-                cursor.execute("""SELECT qrcode, qty_index FROM orders
+                cursor.execute("""SELECT qrcode, qty_index, Trans_id FROM orders
                     WHERE order_id = ? AND line_items_id = ?
                     ORDER BY qty_index ASC
                 """, (order_id, line_items_id))
                 
                 qrcode_rows = cursor.fetchall()
                 qrcode_list = [r[0] for r in qrcode_rows]
+                trans_id_list = [r[2] for r in qrcode_rows]
+
+                cid_list = []
+                for tid in trans_id_list:
+                    cursor.execute("SELECT CID FROM CID_TABLE WHERE Trans_id = ?", (tid,))
+                    cid_row = cursor.fetchone()
+                    cid_list.append(cid_row[0] if cid_row else None)
             
                 logging.info(f"line_items_id={line_items_id} 全部完成，寄送含 {len(qrcode_list)} 張 QR code 的信")
-                send_order_email(email, qrcode_list, full_title)
+                send_order_email(email, qrcode_list, full_title, cid_list=cid_list)
             else:
         
                 logging.info(f"line_items_id={line_items_id} 尚有 {remaining_in_item} 筆未完成，等待中")
@@ -451,7 +462,7 @@ def notify_esim():
     else:
         qrcode_url = qrcode
     
-    with sqlite3.connect("orders.db") as conn:
+    with sqlite3.connect("orders.db", timeout=30) as conn:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT email, Title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id
@@ -484,15 +495,21 @@ def notify_esim():
         
         remaining_in_item = cursor.fetchone()[0]
         if remaining_in_item == 0:
-            cursor.execute("""SELECT qrcode, qty_index FROM orders
+            cursor.execute("""SELECT qrcode, qty_index, Trans_id FROM orders
                 WHERE order_id = ? AND line_items_id = ?
                 ORDER BY qty_index ASC
             """, (order_id, line_items_id))
             qrcode_rows = cursor.fetchall()
             qrcode_list = [r[0] for r in qrcode_rows]
-           
+            trans_id_list = [r[2] for r in qrcode_rows]
+
+            cid_list = []
+            for tid in trans_id_list:
+                cursor.execute("SELECT CID FROM CID_TABLE WHERE Trans_id = ?", (tid,))
+                cid_row = cursor.fetchone()
+                cid_list.append(cid_row[0] if cid_row else None)
             logging.info(f"line_items_id={line_items_id} 全部完成，寄送含 {len(qrcode_list)} 張 QR code 的信")
-            send_order_email(email, qrcode_list, full_title)
+            send_order_email(email, qrcode_list, full_title, cid_list=cid_list)
         else:
        
             logging.info(f"line_items_id={line_items_id} 尚有 {remaining_in_item} 筆未完成，等待中")
@@ -501,7 +518,7 @@ def notify_esim():
     check_and_close_order(order_id, order_id_for_close_cyberbiz)
     return jsonify({"code": "000", "mesg": "success"})
     
-def add_text_to_QRcode(qrcode_url, product_name):
+def add_text_to_QRcode(qrcode_url, product_name, cid=None):
     if isinstance(qrcode_url, bytes):
         img=Image.open(io.BytesIO(qrcode_url))
     else:
@@ -513,8 +530,10 @@ def add_text_to_QRcode(qrcode_url, product_name):
     
     try:
         font_title = ImageFont.truetype("/root/app/NotoSansCJKtc-Regular.otf", 20)
+        font_cid = ImageFont.truetype("/root/app/NotoSansCJKtc-Regular.otf", 16)
     except Exception:
         font_title = ImageFont.load_default()
+        font_cid = ImageFont.load_default() 
         
     dummy_draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
     bbox = dummy_draw.textbbox((0, 0), product_name, font=font_title)
@@ -528,13 +547,16 @@ def add_text_to_QRcode(qrcode_url, product_name):
     draw=ImageDraw.Draw(new_img)
     draw.text((10, 10), f"{product_name}", fill="black",  font=font_title)
     
+    if cid:
+        draw.text((10, img.height + header_height + 10), f"CID: {cid}", fill="black", font=font_cid)
+    
     img_byte=io.BytesIO()
     new_img.save(img_byte, format="PNG")
     img_byte.seek(0)
     
     return img_byte.read()
 
-def send_order_email(to_email, qrcode_url_list, product_name):
+def send_order_email(to_email, qrcode_url_list, product_name, cid_list=None):
     
     from_email = "wuge.esim@gmail.com"
     app_password = os.environ.get("GMAIL_PASSWORD")
@@ -600,7 +622,8 @@ def send_order_email(to_email, qrcode_url_list, product_name):
             msg.attach(pdf)
 
         for idx, qrcode_url in enumerate(qrcode_url_list):
-            img_data = add_text_to_QRcode(qrcode_url, f"{product_name}（{idx+1}）")
+            cid = cid_list[idx] if cid_list and idx < len(cid_list) else None
+            img_data = add_text_to_QRcode(qrcode_url, f"{product_name}（{idx+1}）", cid=cid)
             img=MIMEImage(img_data)
             img.add_header("Content-ID", f"<qrcode_{idx}>")
             img.add_header("Content-Disposition", "inline")
@@ -614,7 +637,7 @@ def send_order_email(to_email, qrcode_url_list, product_name):
         logging.info(f"Send email failed: {e}")
         
 def check_and_close_order(order_id, order_id_for_close_cyberbiz):
-    with sqlite3.connect("orders.db") as conn:
+    with sqlite3.connect("orders.db", timeout=30) as conn:
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -668,7 +691,7 @@ def orders():
     date_to = request.args.get("date_to")  
     page = int(request.args.get("page", 1)) 
     per_page = 20                                
-    with sqlite3.connect("orders.db") as conn:
+    with sqlite3.connect("orders.db", timeout=30) as conn:
         cursor = conn.cursor()
         sql = """
             SELECT o.order_id, o.Created_AT, o.PlanCode, o.email, o.status, o.qc, o.Title, c.CID, o.NOTE, o.PRICE
@@ -831,7 +854,7 @@ def test_line_items():
     if not order_id_query:
         return "請提供 order_id，例如 /test_line_items?order_id=20263"
 
-    with sqlite3.connect("orders.db") as conn:
+    with sqlite3.connect("orders.db", timeout=30) as conn:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT line_items_id, status
@@ -856,7 +879,7 @@ def test_line_items():
         
 @app.route("/retry/<trans_id>")
 def retry(trans_id):
-    with sqlite3.connect("orders.db") as conn:
+    with sqlite3.connect("orders.db", timeout=30) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT order_id_for_close_cyberbiz FROM orders WHERE Trans_id=?", (trans_id,))
         row = cursor.fetchone()
