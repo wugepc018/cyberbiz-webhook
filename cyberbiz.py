@@ -852,6 +852,22 @@ def test_line_items():
         狀態: {statuses} <br>
         可以用這些 line_item_ids 測試 Cyberbiz API
         """
+        
+@app.route("/retry/<trans_id>")
+def retry(trans_id):
+    with sqlite3.connect("orders.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT order_id_for_close_cyberbiz FROM orders WHERE Trans_id=?", (trans_id,))
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"error": "找不到訂單"})
+        close_id = row[0]
+    
+    t = threading.Thread(target=poll_lpa, args=(trans_id, close_id))
+    t.daemon = True
+    t.start()
+    return jsonify({"status": "ok", "message": f"重新觸發 {trans_id}"})
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=True)
