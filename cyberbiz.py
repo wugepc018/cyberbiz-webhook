@@ -756,13 +756,49 @@ def orders():
             <meta charset="utf-8">
             <title>訂單報表</title>
             <style>
-                body {{ font-family: Arial, sans-serif; padding: 20px; }}
-                table {{ border-collapse: collapse; width: 100%; }}
-                th, td {{ border: 1px solid #ccc; padding: 8px; text-align: left; font-size: 13px; }}
-                th {{ background: #f0f0f0; }}
-                .completed {{ color: green; }}
-                .processing {{ color: orange; }}
-                .pending {{ color: gray; }}
+                * {{ box-sizing: border-box; }}
+                body {{ 
+                    font-family: 'Segoe UI', Arial, sans-serif; 
+                    padding: 28px 36px; 
+                    background: #f7f8fa; 
+                    color: #333;
+                }}
+                h2 {{ 
+                    font-size: 20px; 
+                    font-weight: 600; 
+                    margin-bottom: 20px; 
+                    color: #1a1a2e;
+                }}
+                table {{ 
+                    border-collapse: collapse; 
+                    width: 100%; 
+                    background: #fff;
+                    border-radius: 8px;
+                    overflow: hidden;
+                    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+                }}
+                th {{ 
+                    background: #f0f2f5; 
+                    color: #555;
+                    font-size: 12px;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                    padding: 11px 14px; 
+                    border-bottom: 1px solid #e2e5ea;
+                    text-align: left;
+                }}
+                td {{ 
+                    padding: 10px 14px; 
+                    font-size: 13px; 
+                    border-bottom: 1px solid #f0f2f5;
+                    color: #444;
+                }}
+                tr:last-child td {{ border-bottom: none; }}
+                tbody tr:hover td {{ background: #f5f8ff; }}
+                .completed {{ color: #1a9e5c; font-weight: 500; }}
+                .processing {{ color: #d48800; font-weight: 500; }}
+                .pending {{ color: #999; font-weight: 500; }}
             </style>
         </head>
         
