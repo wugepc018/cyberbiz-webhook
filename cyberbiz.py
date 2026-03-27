@@ -810,8 +810,8 @@ def orders():
                     cursor: pointer;
                     color: #555e7a;
                     background: #fff;
-                    min-width: 120px;
-                    font-weight: 600;
+                    min-width: 100px;
+                    font-weight: 100;
                 }}
                 button:hover {{
                     background: #555e7a;
@@ -831,12 +831,24 @@ def orders():
                     box-shadow: 0 0 0 3px rgba(85, 94, 122, 0.1);
                 }}
                 
+                select{{
+                    display: block;
+                    cursor: pointer;
+                    padding: 8px 12px;
+                }}
+                
                 input:focus {{
                     outline: none;
                     border-color: #555e7a;
                     box-shadow: 0 0 0 3px rgba(85, 94, 122, 0.1);
                     background: white;
                 }}
+                
+                input {{
+                    outline: none;
+                    border-radius: 4px;
+                }}
+                
                 th:nth-child(1), td:nth-child(1)  {{ width: 105px; }}
                 th:nth-child(2), td:nth-child(2)  {{ width: 170px; }}
                 th:nth-child(3), td:nth-child(3)  {{ width: 90px; }}
