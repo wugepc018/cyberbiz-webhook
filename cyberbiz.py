@@ -179,10 +179,12 @@ def cyberbiz_order():
                     cursor.execute(
                         """INSERT INTO orders 
                             (order_id, Created_AT, Trans_id, PlanCode, email, product_id, qc, 
-                                status, Title, qty_index, QUANTITY, order_id_for_close_cyberbiz, NOTE, line_items_id, PRICE, USE_DATE, MOBILE_NUMBER, CUSTOMER_NAME ) 
+                            status, qrcode, Title, qty_index, QUANTITY, order_id_for_close_cyberbiz, 
+                            NOTE, line_items_id, PRICE, USE_DATE, MOBILE_NUMBER, CUSTOMER_NAME) 
                             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                             (order_id, created_at, trans_id, sku, email, product_id, qc,
-                            "pending", full_title, qty_index, quantity, order_id_for_close_cyberbiz, note, line_items_id, price, use_date, mobile_number, Customer_name)
+                            "pending", None, full_title, qty_index, quantity, order_id_for_close_cyberbiz, 
+                            note, line_items_id, price, use_date, mobile_number, Customer_name)
                     )
                     tasks.append((order_id, sku, email, trans_id, order_id_for_close_cyberbiz, qc))
                 
