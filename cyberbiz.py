@@ -667,10 +667,11 @@ def close_cyberbiz_order(order_id:int):
     for i in range(3):
         try:
             response = requests.put(url, headers=headers, data=payload, timeout=30)
-            logging.info(f"Cyberbiz 結案 order_id={order_id} response={response.text}")
+            logging.info(f"Cyberbiz 結案成功: {response.text}")
+            break
         except Exception as e:
-            logging.error(f"Cyberbiz 結案失敗 order_id={order_id}: {e}")
-    
+            logging.error(f"第{i+1}次結案失敗: {e}")
+            time.sleep(3)
     
 @app.route("/orders")
 def orders():
