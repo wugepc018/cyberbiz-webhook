@@ -785,16 +785,23 @@ def orders():
                     text-transform: uppercase;
                     letter-spacing: 0.5px;
                     padding: 11px 14px; 
-                    border-bottom: 1px solid #e2e5ea;
+                    border: 1px solid #e2e5ea;
                     text-align: left;
+                    white-space: nowrap;
                 }}
                 td {{ 
                     padding: 10px 14px; 
                     font-size: 13px; 
-                    border-bottom: 1px solid #f0f2f5;
+                    border: 1px solid #e2e5ea;
                     color: #444;
+                    vertical-align: top;
                 }}
-                tr:last-child td {{ border-bottom: none; }}
+                td:nth-child(4) {{
+                    min-width: 180px;
+                    max-width: 240px;
+                    word-break: break-word;
+                    line-height: 1.6;
+                }}
                 tbody tr:hover td {{ background: #f5f8ff; }}
                 .completed {{ color: #1a9e5c; font-weight: 500; }}
                 .processing {{ color: #d48800; font-weight: 500; }}
