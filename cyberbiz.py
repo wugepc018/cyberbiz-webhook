@@ -351,6 +351,8 @@ def poll_lpa(trans_id, order_id_for_close_cyberbiz):
 
         product_id, qrcodes_lpa, cid = result
         if not qrcodes_lpa or not cid:
+            logging.info(f"第{i+1}次查詢 qrcode或cid為空，sleep 600s")
+            time.sleep(600)
             continue
         lpa = qrcodes_lpa[0]
         cid = cid[0]
@@ -824,16 +826,12 @@ def orders():
                     border-radius: 4px;
                     color: #444;
                     background: #fff;
+                    font-family: 'Segoe UI', Arial, sans-serif;
                 }}
                 select:focus {{
                     outline: none;
                     border-color: #555e7a;
                     box-shadow: 0 0 0 3px rgba(85, 94, 122, 0.1);
-                }}
-                
-                select{{
-                    cursor: pointer;
-                    padding: 8px 12px;
                 }}
                 
                 input:focus {{
@@ -842,17 +840,23 @@ def orders():
                     box-shadow: 0 0 0 3px rgba(85, 94, 122, 0.1);
                     background: white;
                 }}
-                a:hover {{
-                    background: #555e7a;
-                    color: #fff !important;
-                    border-color: #555e7a;
-                    border-radius: 6px;
+                
+                input {{
+                    border: 1px solid #ccc;
+                    border-radius: 4px;
+                    font-family: 'Segoe UI', Arial, sans-serif;
                 }}
                 
                 a {{
                     font-family: 'Segoe UI', Arial, sans-serif;
                     display: inline-block;
                     transition: all 0.2s ease;
+                }}
+                a:hover {{
+                    background: #555e7a;
+                    color: #fff !important;
+                    border-color: #555e7a;
+                    border-radius: 6px;
                 }}
                 
                 th:nth-child(1), td:nth-child(1)  {{ width: 105px; }}
