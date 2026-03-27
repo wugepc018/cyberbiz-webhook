@@ -802,7 +802,7 @@ def orders():
                 
                 button{{
                     margin: 0;
-                    font-size: 20px;
+                    font-size: 15px;
                     padding: 5px 12px;
                     border-radius: 6px;
                     border: 1.5px solid #555e7a;
@@ -843,8 +843,9 @@ def orders():
                 }}
                 a:hover {{
                     background: #555e7a;
-                    color: #fff;
+                    color: #fff !important;
                     border-color: #555e7a;
+                    border-radius: 6px;
                 }}
                 
                 a {{
