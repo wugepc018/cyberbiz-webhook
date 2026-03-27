@@ -119,21 +119,9 @@ def cyberbiz_order():
     order_id_for_close_cyberbiz = data.get("id")
     note=data.get("note")
     created_at=data.get("created_at")
-    extra_info_str = data.get("extra_info", "{}")
 
-    try:
-        extra_info = json.loads(extra_info_str)
-        use_date_str = extra_info.get("使用日期", "")
-        
-        if use_date_str:
-            use_date = int(datetime.datetime.strptime(use_date_str, "%Y/%m/%d").timestamp())
-        else:
-            use_date = None
-    except (json.JSONDecodeError, TypeError, ValueError):
-        use_date = None
     logging.info(f"Order ID: {order_id}")
     logging.info(f"客戶email: {email}")
-    logging.info(f"預計使用日期：{use_date}")
     
     with sqlite3.connect("orders.db", timeout=30) as conn:
         cursor=conn.cursor()
@@ -176,6 +164,8 @@ def cyberbiz_order():
                     trans_id = str(uuid.uuid4()).replace("-", "")[:20]
                     auto_count += 1 
                     qty_index = existing_count + auto_count
+                    today = datetime.datetime.now() #日期寫死 
+                    use_date = int(today.timestamp())
                     cursor.execute(
                         """INSERT INTO orders 
                             (order_id, Created_AT, Trans_id, PlanCode, email, product_id, qc, 
