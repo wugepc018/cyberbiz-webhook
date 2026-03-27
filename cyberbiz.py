@@ -799,6 +799,44 @@ def orders():
                     vertical-align: top;
                     word-break: break-word;
                 }}
+                
+                button{{
+                    margin: 0;
+                    font-size: 15px;
+                    padding: 12px 25px;
+                    border-radius: 8px;
+                    border: 1.5px solid #555e7a;
+                    transition: all 0.3s ease;
+                    cursor: pointer;
+                    color: #555e7a;
+                    background: #fff;
+                    min-width: 120px;
+                    font-weight: 600;
+                }}
+                button:hover {{
+                    background: #555e7a;
+                    color: #fff;
+                }}
+                select {{
+                    cursor: pointer;
+                    padding: 5px 8px;
+                    border: 1px solid #ccc;
+                    border-radius: 4px;
+                    color: #444;
+                    background: #fff;
+                }}
+                select:focus {{
+                    outline: none;
+                    border-color: #555e7a;
+                    box-shadow: 0 0 0 3px rgba(85, 94, 122, 0.1);
+                }}
+                
+                input:focus {{
+                    outline: none;
+                    border-color: #555e7a;
+                    box-shadow: 0 0 0 3px rgba(85, 94, 122, 0.1);
+                    background: white;
+                }}
                 th:nth-child(1), td:nth-child(1)  {{ width: 105px; }}
                 th:nth-child(2), td:nth-child(2)  {{ width: 170px; }}
                 th:nth-child(3), td:nth-child(3)  {{ width: 90px; }}
