@@ -803,14 +803,14 @@ def orders():
                 button{{
                     margin: 0;
                     font-size: 15px;
-                    padding: 12px 25px;
+                    padding: 12px 12px;
                     border-radius: 8px;
                     border: 1.5px solid #555e7a;
                     transition: all 0.3s ease;
                     cursor: pointer;
                     color: #555e7a;
                     background: #fff;
-                    min-width: 100px;
+                    min-width: 70px;
                     font-weight: 100;
                 }}
                 button:hover {{
