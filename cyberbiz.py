@@ -336,7 +336,7 @@ def query_lpa(trans_id):
     }
     response=requests.post(FTC_GET_ESIM_URL, json=payload, headers=headers, timeout=10)
     data=response.json()
-    if data.get("code")==200:
+    if data.get("code")=="200":
         for order in data.get("data", []):
             for line in order.get("orderLine", []):
                 product_id = line.get("productId")
