@@ -327,14 +327,14 @@ def FTC_order_esim(order_id, planCode, email, trans_id , order_id_for_close_cybe
 def query_lpa(trans_id):
     FTC_GET_ESIM_URL="https://zdfjzyhdcl.execute-api.ap-northeast-1.amazonaws.com/prod/v1/getInfo"
     
-    params={
+    payload={
         "orderId":trans_id
     }
     headers = {
     "Content-Type": "application/json",
-    "x-api-key": FTC_API_KEY #等拿到再換
+    "x-api-key": FTC_API_KEY 
     }
-    response=requests.get(FTC_GET_ESIM_URL, params=params, headers=headers, timeout=10)
+    response=requests.post(FTC_GET_ESIM_URL, json=payload, headers=headers, timeout=10)
     data=response.json()
     if data.get("code")==200:
         for order in data.get("data", []):
