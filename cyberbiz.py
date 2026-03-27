@@ -345,6 +345,7 @@ def poll_lpa(trans_id, order_id_for_close_cyberbiz):
         result = query_lpa(trans_id)
 
         if not result:
+            logging.info(f"第{i+1}次查詢 result=None，sleep 600s")
             time.sleep(600)
             continue
 
