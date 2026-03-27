@@ -772,6 +772,7 @@ def orders():
                 table {{ 
                     border-collapse: collapse; 
                     width: 100%; 
+                    table-layout: fixed;
                     background: #fff;
                     border-radius: 8px;
                     overflow: hidden;
@@ -788,6 +789,8 @@ def orders():
                     border: 1px solid #e2e5ea;
                     text-align: left;
                     white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
                 }}
                 td {{ 
                     padding: 10px 14px; 
@@ -795,13 +798,19 @@ def orders():
                     border: 1px solid #e2e5ea;
                     color: #444;
                     vertical-align: top;
-                }}
-                td:nth-child(4) {{
-                    min-width: 180px;
-                    max-width: 240px;
                     word-break: break-word;
-                    line-height: 1.6;
                 }}
+                th:nth-child(1), td:nth-child(1)  {{ width: 105px; }}
+                th:nth-child(2), td:nth-child(2)  {{ width: 170px; }}
+                th:nth-child(3), td:nth-child(3)  {{ width: 75px;  }}
+                th:nth-child(4), td:nth-child(4)  {{ width: 160px; }}
+                th:nth-child(5), td:nth-child(5)  {{ width: 155px; }}
+                th:nth-child(6), td:nth-child(6)  {{ width: 45px;  }}
+                th:nth-child(7), td:nth-child(7)  {{ width: 210px; }}
+                th:nth-child(8), td:nth-child(8)  {{ width: 55px;  }}
+                th:nth-child(9), td:nth-child(9)  {{ width: 75px;  }}
+                th:nth-child(10), td:nth-child(10) {{ width: 80px; }}
+                th:nth-child(11), td:nth-child(11) {{ width: 120px; }}
                 tbody tr:hover td {{ background: #f5f8ff; }}
                 .completed {{ color: #1a9e5c; font-weight: 500; }}
                 .processing {{ color: #d48800; font-weight: 500; }}
