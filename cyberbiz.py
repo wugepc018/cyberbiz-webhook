@@ -664,11 +664,12 @@ def close_cyberbiz_order(order_id:int):
     }
     logging.info(f"x_date: {x_date}")
     logging.info(f"digest: {digest}")
-    try:
-        response = requests.put(url, headers=headers, data=payload, timeout=10)
-        logging.info(f"Cyberbiz 結案 order_id={order_id} response={response.text}")
-    except Exception as e:
-        logging.error(f"Cyberbiz 結案失敗 order_id={order_id}: {e}")
+    for i in range(3):
+        try:
+            response = requests.put(url, headers=headers, data=payload, timeout=30)
+            logging.info(f"Cyberbiz 結案 order_id={order_id} response={response.text}")
+        except Exception as e:
+            logging.error(f"Cyberbiz 結案失敗 order_id={order_id}: {e}")
     
     
 @app.route("/orders")
