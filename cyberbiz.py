@@ -406,6 +406,7 @@ def poll_lpa(trans_id, order_id_for_close_cyberbiz):
 
         logging.info(f"訂購esim完成 order_id={order_id} trans_id={trans_id}")
         check_and_close_order(order_id, order_id_for_close_cyberbiz)
+        break
 def generate_qrcode(qrcodes_lpa):
     img = qrcode.make(qrcodes_lpa)
       
