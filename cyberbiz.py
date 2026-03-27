@@ -804,7 +804,7 @@ def orders():
                 th:nth-child(2), td:nth-child(2)  {{ width: 170px; }}
                 th:nth-child(3), td:nth-child(3)  {{ width: 75px;  }}
                 th:nth-child(4), td:nth-child(4)  {{ width: 160px; }}
-                th:nth-child(5), td:nth-child(5)  {{ width: 155px; }}
+                th:nth-child(5), td:nth-child(5)  {{ width: 160px; }}
                 th:nth-child(6), td:nth-child(6)  {{ width: 45px;  }}
                 th:nth-child(7), td:nth-child(7)  {{ width: 210px; }}
                 th:nth-child(8), td:nth-child(8)  {{ width: 55px;  }}
