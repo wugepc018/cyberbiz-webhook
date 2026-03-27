@@ -802,16 +802,15 @@ def orders():
                 
                 button{{
                     margin: 0;
-                    font-size: 10px;
-                    padding: 12px 8px;
-                    border-radius: 8px;
+                    font-size: 20px;
+                    padding: 5px 12px;
+                    border-radius: 6px;
                     border: 1.5px solid #555e7a;
                     transition: all 0.3s ease;
                     cursor: pointer;
                     color: #555e7a;
                     background: #fff;
-                    min-width: 70px;
-                    font-weight: 100;
+                    text-decoration:none
                 }}
                 button:hover {{
                     background: #555e7a;
@@ -842,10 +841,16 @@ def orders():
                     box-shadow: 0 0 0 3px rgba(85, 94, 122, 0.1);
                     background: white;
                 }}
+                a:hover {{
+                    background: #555e7a;
+                    color: #fff;
+                    border-color: #555e7a;
+                }}
                 
-                input {{
-                    outline: none;
-                    border-radius: 4px;
+                a {{
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                    display: inline-block;
+                    transition: all 0.2s ease;
                 }}
                 
                 th:nth-child(1), td:nth-child(1)  {{ width: 105px; }}
@@ -873,17 +878,17 @@ def orders():
             
                 <input type="text" name="order_id" placeholder="輸入訂單單號" 
                     value="{order_id_query if order_id_query else ''}"
-                    style="padding:5px; width:200px;">
+                    style="padding:5px; width:200px; font-family: 'Segoe UI', Arial, sans-serif;">
                     
                 <input type="text" name="title" placeholder="輸入產品名稱" 
                     value="{title_query if title_query else ''}"
-                    style="padding:5px; width:200px;">
+                    style="padding:5px; width:200px;font-family: 'Segoe UI', Arial, sans-serif; ">
                     
                 <input type="text" name="vendor" placeholder="輸入廠商代號" 
                     value="{Vendor_query if Vendor_query else ''}"
-                    style="padding:5px; width:200px;">
+                    style="padding:5px; width:200px; font-family: 'Segoe UI', Arial, sans-serif;">
                     
-                <select name="status" style="padding:5px;">
+                <select name="status" style="padding:5px; font-family: 'Segoe UI', Arial, sans-serif;">
                     <option value="">全部狀態</option>
                     <option value="pending" { "selected" if status_query == 'pending' else '' }>Pending</option>
                     <option value="processing" { "selected" if status_query == 'processing' else '' }>Processing</option>
@@ -892,13 +897,13 @@ def orders():
                 
                 <input type="date" name="date_from"
                     value="{date_from or ''}"
-                    style="padding:5px;">
+                    style="padding:5px; font-family: 'Segoe UI', Arial, sans-serif;">
                     
                 <span>～</span>
                 
                 <input type="date" name="date_to"
                     value="{date_to or ''}"
-                    style="padding:5px;">
+                    style="padding:5px; font-family: 'Segoe UI', Arial, sans-serif;">
                     
                 <button type="submit">搜尋</button>
                 <a href="/orders" style="padding:5px 12px; text-decoration:none; border:1.5px solid #555e7a; border-radius:6px; color:#555e7a; font-size:14px;">清除</a>
