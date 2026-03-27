@@ -804,11 +804,11 @@ def orders():
                 th:nth-child(2), td:nth-child(2)  {{ width: 170px; }}
                 th:nth-child(3), td:nth-child(3)  {{ width: 75px;  }}
                 th:nth-child(4), td:nth-child(4)  {{ width: 160px; }}
-                th:nth-child(5), td:nth-child(5)  {{ width: 160px; }}
+                th:nth-child(5), td:nth-child(5)  {{ width: 185px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
                 th:nth-child(6), td:nth-child(6)  {{ width: 45px;  }}
                 th:nth-child(7), td:nth-child(7)  {{ width: 210px; }}
                 th:nth-child(8), td:nth-child(8)  {{ width: 55px;  }}
-                th:nth-child(9), td:nth-child(9)  {{ width: 75px;  }}
+                th:nth-child(9), td:nth-child(9)  {{ width: 85px; white-space: nowrap; }}
                 th:nth-child(10), td:nth-child(10) {{ width: 80px; }}
                 th:nth-child(11), td:nth-child(11) {{ width: 120px; }}
                 tbody tr:hover td {{ background: #f5f8ff; }}
