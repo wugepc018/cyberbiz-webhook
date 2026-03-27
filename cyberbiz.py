@@ -802,8 +802,8 @@ def orders():
                 
                 button{{
                     margin: 0;
-                    font-size: 15px;
-                    padding: 12px 12px;
+                    font-size: 10px;
+                    padding: 12px 8px;
                     border-radius: 8px;
                     border: 1.5px solid #555e7a;
                     transition: all 0.3s ease;
@@ -832,7 +832,6 @@ def orders():
                 }}
                 
                 select{{
-                    display: block;
                     cursor: pointer;
                     padding: 8px 12px;
                 }}
@@ -870,7 +869,7 @@ def orders():
         <body>
             <h2>訂單報表</h2>
 
-            <form method="get" action="/orders" style="margin-bottom:20px;">
+            <form method="get" action="/orders" style="margin-bottom:20px; display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
             
                 <input type="text" name="order_id" placeholder="輸入訂單單號" 
                     value="{order_id_query if order_id_query else ''}"
@@ -902,7 +901,7 @@ def orders():
                     style="padding:5px;">
                     
                 <button type="submit">搜尋</button>
-                <a href="/orders" style="padding:5px 12px; text-decoration:none; border:1px solid #ccc; border-radius:3px;">清除</a>
+                <a href="/orders" style="padding:5px 12px; text-decoration:none; border:1.5px solid #555e7a; border-radius:6px; color:#555e7a; font-size:14px;">清除</a>
             </form>
             <table>
                 <tr>
