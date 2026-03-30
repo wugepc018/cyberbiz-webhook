@@ -19,6 +19,9 @@ from urllib.parse import urlencode
 import logging
 import time
 import uuid
+import datetime
+import qrcode
+import threading
 
 #LOG_PATH = "/root/app/cyberbiz-webhook/logs/webhook.log"
 logging.basicConfig(
@@ -32,15 +35,16 @@ APP_SECRET = os.environ.get("APP_SECRET")
 CYBERBIZ_USERNAME = os.environ.get("CYBERBIZ_USERNAME")
 CYBERBIZ_SECRET = os.environ.get("CYBERBIZ_SECRET", "").encode()
 CYBERBIZ_TOKEN = os.environ.get("CYBERBIZ_TOKEN")
+FTC_API_KEY=os.environ.get("x_api_key")
 
 def init_db():
-    with sqlite3.connect("orders.db") as conn:
+    with sqlite3.connect("orders.db", timeout=30) as conn:
         cursor = conn.cursor()
         print("DB PATH:", os.path.abspath("orders.db"))
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS orders (
         order_id TEXT,
-        Created_AT,
+        Created_AT TEXT,
         Trans_id TEXT,
         product_id TEXT,
         PlanCode TEXT,
@@ -54,7 +58,10 @@ def init_db():
         order_id_for_close_cyberbiz INTEGER,
         NOTE TEXT,
         line_items_id TEXT,
-        PRICE
+        PRICE INTEGER,
+        USE_DATE INTEGER,
+        MOBILE_NUMBER INTEGER,
+        CUSTOMER_NAME TEXT
         )
         """)
         cursor.execute("PRAGMA table_info(orders)")
@@ -66,12 +73,22 @@ def init_db():
 
         if "line_items_id" not in columns:
             cursor.execute("ALTER TABLE orders ADD COLUMN line_items_id TEXT")
+        
+        if "USE_DATE" not in columns:
+            cursor.execute("ALTER TABLE orders ADD COLUMN USE_DATE INTEGER")
+        
+        if "MOBILE_NUMBER" not in columns:
+            cursor.execute("ALTER TABLE orders ADD COLUMN MOBILE_NUMBER INTEGER")
             
-        if "QUANTITY" not in columns:
-            cursor.execute("ALTER TABLE orders ADD COLUMN QUANTITY INTEGER")   
-            
+        if "Created_AT" not in columns:
+            cursor.execute("ALTER TABLE orders ADD COLUMN Created_AT TEXT")
+        
+        if "CUSTOMER_NAME" not in columns:
+            cursor.execute("ALTER TABLE orders ADD COLUMN CUSTOMER_NAME TEXT")
+        
         if "PRICE" not in columns:
-            cursor.execute("ALTER TABLE orders ADD COLUMN PRICE INTEGER")   
+            cursor.execute("ALTER TABLE orders ADD COLUMN PRICE INTEGER")
+            
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS CID_TABLE (
             CID TEXT,
@@ -79,7 +96,7 @@ def init_db():
         )
         """)
         conn.commit()
-      
+        
 init_db()
 app = Flask(__name__)
 
@@ -96,14 +113,17 @@ def cyberbiz_order():
     logging.info(json.dumps(data, indent=2, ensure_ascii=False))
     
     email = data.get("customer", {}).get("email")
+    mobile_number = data.get("customer", {}).get("mobile")
+    Customer_name = data.get("customer", {}).get("name")
     order_id = data.get("order_number")
     order_id_for_close_cyberbiz = data.get("id")
     note=data.get("note")
     created_at=data.get("created_at")
+
     logging.info(f"Order ID: {order_id}")
     logging.info(f"客戶email: {email}")
     
-    with sqlite3.connect("orders.db") as conn:
+    with sqlite3.connect("orders.db", timeout=30) as conn:
         cursor=conn.cursor()
         line_items = data.get("line_items", [])
         tasks = []
@@ -129,8 +149,8 @@ def cyberbiz_order():
                 line_items_id=item.get("id")
                 variant_title=item.get("variant_title")
                 quantity=item.get("quantity")
-                try: 
-                    price = float(item.get("price") or 0)
+                try:
+                    price = item.get("price") or 0
                 except (TypeError, ValueError):
                     price = 0
                 logging.info(f"Product ID: {product_id}")
@@ -139,48 +159,54 @@ def cyberbiz_order():
                 logging.info(f"產品類型: {variant_title}")
                 logging.info(f"產品代號: {sku}")
                 logging.info(f"備註欄位: {note}")
-                logging.info(f"商品數量: {quantity}")
                 full_title = f"{title} {variant_title}" if variant_title else title
-                for i in range(quantity):  # ← 展開成多筆
+                for i in range(quantity):
+                    trans_id = str(uuid.uuid4()).replace("-", "")[:20]
                     auto_count += 1 
                     qty_index = existing_count + auto_count
-                    trans_id = str(uuid.uuid4()).replace("-", "")[:20]
+                    today = datetime.datetime.now() #日期寫死 
+                    use_date = int(today.timestamp())
                     cursor.execute(
                         """INSERT INTO orders 
-                        (order_id, Created_AT, Trans_id, PlanCode, email, product_id, qc, 
-                            status, Title, qty_index, QUANTITY, order_id_for_close_cyberbiz, NOTE, line_items_id, PRICE) 
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                        (order_id, created_at, trans_id, sku, email, product_id, qc,
-                        "pending", full_title, qty_index, quantity, order_id_for_close_cyberbiz, note, line_items_id, price)
+                            (order_id, Created_AT, Trans_id, PlanCode, email, product_id, qc, 
+                            status, qrcode, Title, qty_index, QUANTITY, order_id_for_close_cyberbiz, 
+                            NOTE, line_items_id, PRICE, USE_DATE, MOBILE_NUMBER, CUSTOMER_NAME) 
+                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                            (order_id, created_at, trans_id, sku, email, product_id, qc,
+                            "pending", None, full_title, qty_index, quantity, order_id_for_close_cyberbiz, 
+                            note, line_items_id, price, use_date, mobile_number, Customer_name)
                     )
-                    tasks.append((order_id, sku, email, trans_id))
-
+                    tasks.append((order_id, sku, email, trans_id, order_id_for_close_cyberbiz, qc))
+                
         conn.commit()
-    
-    for task in tasks: 
-        order_esim(*task)
         
+    for task in tasks:
+        order_id_, sku_, email_, trans_id_, close_id_, qc_ = task
+        if qc_ == "AUTO001":
+            order_esim(order_id_, sku_, email_, trans_id_, close_id_)
+        elif qc_ == "AUTO002":
+            FTC_order_esim(order_id_, sku_, email_, trans_id_, close_id_)
+            
     return jsonify({
         "status": "ok",
     })
     
-#訂購esim
+#RSP的訂購esim api
 Base_URL="https://neware.biz"
-def order_esim(order_id, planCode, email , trans_id):
+def order_esim(order_id, planCode, email, trans_id , order_id_for_close_cyberbiz):
     RSP_SUBSCRIBE_API=f"{Base_URL}/openapi/esim/plan/subscribe"
-
     timestamp = str(int(time.time() * 1000))  
     raw = APP_ID + trans_id + timestamp + APP_SECRET
     ciphertext = hashlib.md5(raw.encode()).hexdigest()
 
-    with sqlite3.connect("orders.db") as conn:
+    with sqlite3.connect("orders.db", timeout=30) as conn:
         cursor = conn.cursor()
         cursor.execute(
             "UPDATE orders SET status = 'processing' WHERE Trans_id = ? AND status = 'pending'",
             (trans_id,)
         )
         conn.commit()
-        
+    
     payload = {
         "planCode": planCode,
         "qrcodeType": 0,
@@ -200,8 +226,8 @@ def order_esim(order_id, planCode, email , trans_id):
             logging.info(f"訂購請求成功 order_id={order_id} planCode={planCode} trans_id={trans_id}")
         
         else:
-            logging.error(f"訂購請求失敗 order_id={order_id} planCode={planCode} trans_id={trans_id} response={response.json()}") 
-            with sqlite3.connect("orders.db") as conn:
+            logging.error(f"供應商回應失敗 code={response.json().get('code')} 內容={response.text}") 
+            with sqlite3.connect("orders.db", timeout=30) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     "UPDATE orders SET status = 'pending' WHERE Trans_id = ?",
@@ -210,8 +236,191 @@ def order_esim(order_id, planCode, email , trans_id):
                 conn.commit()
             
     except Exception as e:
-        logging.error(f"呼叫供應商API失敗 order_id={order_id} trans_id={trans_id} error={e}", exc_info=True)
-    #接收供應商傳來的esim資訊
+        logging.error(f"呼叫供應商API失敗: {e}")
+        
+#FTC的訂購esim api        
+def FTC_order_esim(order_id, planCode, email, trans_id , order_id_for_close_cyberbiz):
+    FTC_SUBSCRIBE_API="https://zdfjzyhdcl.execute-api.ap-northeast-1.amazonaws.com/prod/v1/create"
+    timestamp = str(int(time.time()))  
+    
+
+    with sqlite3.connect("orders.db", timeout=30) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT MOBILE_NUMBER, CUSTOMER_NAME, USE_DATE FROM orders WHERE Trans_id = ? AND status = 'pending'",
+            (trans_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            logging.error(f"找不到 trans_id={trans_id}")
+            return
+
+        mobile_number, customer_name, selectDate = row
+        
+        conn.commit()
+    
+    payload = {
+        "type": "esim",
+        "orderId": trans_id,
+        "email": email,
+        "buyerEmail":email,
+        "buyerName": customer_name,
+        "buyerMobile": mobile_number,
+        "createDate":timestamp,
+        "buyerAddress":None,
+        "selectDate":selectDate,
+        "selectLocation":None,
+        "deliveryType":None,
+        "orderLine":[
+            {
+                "orderLineId":"1",
+                "productId":planCode,
+                "quantity":1
+            },
+            
+        ]
+    }
+    headers = {
+    "Content-Type": "application/json",
+    "x-api-key": FTC_API_KEY 
+    }
+    try:
+        response=requests.post(FTC_SUBSCRIBE_API,json=payload,headers=headers,timeout=10)
+        
+        if response.json().get("code")=="200":
+            logging.info(f"訂購請求成功 order_id={order_id} planCode={planCode} trans_id={trans_id}")
+            
+            with sqlite3.connect("orders.db", timeout=30) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE orders SET status = 'processing' WHERE Trans_id = ?",
+                    (trans_id,)
+                )
+                conn.commit()
+            
+            t = threading.Thread(target=poll_lpa, args=(trans_id, order_id_for_close_cyberbiz))
+            t.daemon = True
+            t.start()
+        else:
+            with sqlite3.connect("orders.db", timeout=30) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE orders SET status = 'pending' WHERE Trans_id = ?",
+                    (trans_id,)
+                )
+                conn.commit()
+            logging.error(f"訂購請求失敗 {response.text}")
+            
+    except Exception as e:
+        logging.error(f"呼叫供應商API失敗: {e}")
+
+def query_lpa(trans_id):
+    FTC_GET_ESIM_URL="https://zdfjzyhdcl.execute-api.ap-northeast-1.amazonaws.com/prod/v1/getInfo"
+    
+    payload={
+        "orderId":trans_id
+    }
+    headers = {
+    "Content-Type": "application/json",
+    "x-api-key": FTC_API_KEY 
+    }
+    response=requests.post(FTC_GET_ESIM_URL, json=payload, headers=headers, timeout=10)
+    data=response.json()
+    if data.get("code")=="200":
+        for order in data.get("data", []):
+            for line in order.get("orderLine", []):
+                product_id = line.get("productId")
+                codes = line.get("code", [])
+                cids = line.get("cid", [])
+                logging.info(f"成功拿到esim資訊 product_id: {product_id} QRCODE_LPA: {codes} cid: {cids}")
+                return product_id, codes, cids
+                
+    else:
+        logging.info(f"沒有拿到esim資訊 {response.text}")
+    
+        
+def poll_lpa(trans_id, order_id_for_close_cyberbiz):
+    qrcode_list=[]
+    for i in range(144):
+        result = query_lpa(trans_id)
+
+        if not result:
+            logging.info(f"第{i+1}次查詢 result=None，sleep 600s")
+            time.sleep(600)
+            continue
+
+        product_id, qrcodes_lpa, cid = result
+        if not qrcodes_lpa or not cid:
+            logging.info(f"第{i+1}次查詢 qrcode或cid為空，sleep 600s")
+            time.sleep(600)
+            continue
+        lpa = qrcodes_lpa[0]
+        cid = cid[0]
+        qrcode_url=generate_qrcode(lpa)
+        qrcode_list.append(qrcode_url)
+        with sqlite3.connect("orders.db", timeout=30) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT email, Title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id
+                FROM orders 
+                WHERE Trans_id = ? AND status = 'processing'
+            """, (trans_id,))
+            row = cursor.fetchone()
+            if not row:
+                logging.error(f"找不到 processing 訂單 {trans_id}")
+                return
+            email, full_title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id= row
+            
+            cursor.execute(
+            "INSERT INTO CID_TABLE (CID, Trans_id) VALUES (?, ?)", (cid, trans_id)
+            )
+            cursor.execute(
+            "UPDATE orders SET status='completed', qrcode=? WHERE Trans_id=?",
+            (qrcode_url, trans_id)
+            )
+            conn.commit()
+            cursor.execute("""
+            SELECT COUNT(*) FROM orders
+            WHERE order_id = ? AND line_items_id = ? AND status != 'completed'
+        """, (order_id, line_items_id))
+        
+            remaining_in_item = cursor.fetchone()[0]
+            if remaining_in_item == 0:
+                
+                cursor.execute("""SELECT qrcode, qty_index, Trans_id FROM orders
+                    WHERE order_id = ? AND line_items_id = ?
+                    ORDER BY qty_index ASC
+                """, (order_id, line_items_id))
+                
+                qrcode_rows = cursor.fetchall()
+                qrcode_list = [r[0] for r in qrcode_rows]
+                trans_id_list = [r[2] for r in qrcode_rows]
+
+                cid_list = []
+                for tid in trans_id_list:
+                    cursor.execute("SELECT CID FROM CID_TABLE WHERE Trans_id = ?", (tid,))
+                    cid_row = cursor.fetchone()
+                    cid_list.append(cid_row[0] if cid_row else None)
+            
+                logging.info(f"line_items_id={line_items_id} 全部完成，寄送含 {len(qrcode_list)} 張 QR code 的信")
+                send_order_email(email, qrcode_list, full_title, cid_list=cid_list)
+            else:
+        
+                logging.info(f"line_items_id={line_items_id} 尚有 {remaining_in_item} 筆未完成，等待中")
+
+        logging.info(f"訂購esim完成 order_id={order_id} trans_id={trans_id}")
+        check_and_close_order(order_id, order_id_for_close_cyberbiz)
+        break
+def generate_qrcode(qrcodes_lpa):
+    img = qrcode.make(qrcodes_lpa)
+      
+    imgByte=io.BytesIO()
+    img.save(imgByte, format="PNG")
+    imgByte.seek(0)
+
+    return imgByte.read()
+    
+#接收供應商傳來的esim資訊
 @app.route("/notify/esim/plan/subscribe", methods=["POST"])
 def notify_esim():
     
@@ -246,7 +455,7 @@ def notify_esim():
     else:
         qrcode_url = qrcode
     
-    with sqlite3.connect("orders.db") as conn:
+    with sqlite3.connect("orders.db", timeout=30) as conn:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT email, Title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id
@@ -279,15 +488,21 @@ def notify_esim():
         
         remaining_in_item = cursor.fetchone()[0]
         if remaining_in_item == 0:
-            cursor.execute("""SELECT qrcode, qty_index FROM orders
+            cursor.execute("""SELECT qrcode, qty_index, Trans_id FROM orders
                 WHERE order_id = ? AND line_items_id = ?
                 ORDER BY qty_index ASC
             """, (order_id, line_items_id))
             qrcode_rows = cursor.fetchall()
             qrcode_list = [r[0] for r in qrcode_rows]
-           
+            trans_id_list = [r[2] for r in qrcode_rows]
+
+            cid_list = []
+            for tid in trans_id_list:
+                cursor.execute("SELECT CID FROM CID_TABLE WHERE Trans_id = ?", (tid,))
+                cid_row = cursor.fetchone()
+                cid_list.append(cid_row[0] if cid_row else None)
             logging.info(f"line_items_id={line_items_id} 全部完成，寄送含 {len(qrcode_list)} 張 QR code 的信")
-            send_order_email(email, qrcode_list, full_title)
+            send_order_email(email, qrcode_list, full_title, cid_list=cid_list)
         else:
        
             logging.info(f"line_items_id={line_items_id} 尚有 {remaining_in_item} 筆未完成，等待中")
@@ -296,17 +511,22 @@ def notify_esim():
     check_and_close_order(order_id, order_id_for_close_cyberbiz)
     return jsonify({"code": "000", "mesg": "success"})
     
-def add_text_to_QRcode(qrcode_url, product_name):
-    response = requests.get(qrcode_url)
-    img = Image.open(io.BytesIO(response.content))
+def add_text_to_QRcode(qrcode_url, product_name, cid=None):
+    if isinstance(qrcode_url, bytes):
+        img=Image.open(io.BytesIO(qrcode_url))
+    else:
+        response = requests.get(qrcode_url)
+        img = Image.open(io.BytesIO(response.content))
     
     header_height = 60
     footer_height = 40
     
     try:
         font_title = ImageFont.truetype("/root/app/NotoSansCJKtc-Regular.otf", 20)
+        font_cid = ImageFont.truetype("/root/app/NotoSansCJKtc-Regular.otf", 16)
     except Exception:
         font_title = ImageFont.load_default()
+        font_cid = ImageFont.load_default() 
         
     dummy_draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
     bbox = dummy_draw.textbbox((0, 0), product_name, font=font_title)
@@ -320,13 +540,16 @@ def add_text_to_QRcode(qrcode_url, product_name):
     draw=ImageDraw.Draw(new_img)
     draw.text((10, 10), f"{product_name}", fill="black",  font=font_title)
     
+    if cid:
+        draw.text((10, img.height + header_height + 10), f"CID: {cid}", fill="black", font=font_cid)
+    
     img_byte=io.BytesIO()
     new_img.save(img_byte, format="PNG")
     img_byte.seek(0)
     
     return img_byte.read()
 
-def send_order_email(to_email, qrcode_url_list, product_name):
+def send_order_email(to_email, qrcode_url_list, product_name, cid_list=None):
     
     from_email = "wuge.esim@gmail.com"
     app_password = os.environ.get("GMAIL_PASSWORD")
@@ -392,7 +615,8 @@ def send_order_email(to_email, qrcode_url_list, product_name):
             msg.attach(pdf)
 
         for idx, qrcode_url in enumerate(qrcode_url_list):
-            img_data = add_text_to_QRcode(qrcode_url, f"{product_name}（{idx+1}）")
+            cid = cid_list[idx] if cid_list and idx < len(cid_list) else None
+            img_data = add_text_to_QRcode(qrcode_url, f"{product_name}（{idx+1}）", cid=cid)
             img=MIMEImage(img_data)
             img.add_header("Content-ID", f"<qrcode_{idx}>")
             img.add_header("Content-Disposition", "inline")
@@ -404,9 +628,9 @@ def send_order_email(to_email, qrcode_url_list, product_name):
         
     except Exception as e:
         logging.info(f"Send email failed: {e}")
-
+        
 def check_and_close_order(order_id, order_id_for_close_cyberbiz):
-    with sqlite3.connect("orders.db") as conn:
+    with sqlite3.connect("orders.db", timeout=30) as conn:
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -443,11 +667,14 @@ def close_cyberbiz_order(order_id:int):
     }
     logging.info(f"x_date: {x_date}")
     logging.info(f"digest: {digest}")
-    try:
-        response = requests.put(url, headers=headers, data=payload, timeout=10)
-        logging.info(f"Cyberbiz 結案 order_id={order_id} response={response.text}")
-    except Exception as e:
-        logging.error(f"Cyberbiz 結案失敗 order_id={order_id}: {e}")
+    for i in range(3):
+        try:
+            response = requests.put(url, headers=headers, data=payload, timeout=30)
+            logging.info(f"Cyberbiz 結案成功: {response.text}")
+            break
+        except Exception as e:
+            logging.error(f"第{i+1}次結案失敗: {e}")
+            time.sleep(3)
     
 @app.route("/orders")
 def orders():
@@ -459,7 +686,7 @@ def orders():
     date_to = request.args.get("date_to")  
     page = int(request.args.get("page", 1)) 
     per_page = 20                                
-    with sqlite3.connect("orders.db") as conn:
+    with sqlite3.connect("orders.db", timeout=30) as conn:
         cursor = conn.cursor()
         sql = """
             SELECT o.order_id, o.Created_AT, o.PlanCode, o.email, o.status, o.qc, o.Title, c.CID, o.NOTE, o.PRICE
@@ -532,34 +759,142 @@ def orders():
             <meta charset="utf-8">
             <title>訂單報表</title>
             <style>
-                body {{ font-family: Arial, sans-serif; padding: 20px; }}
-                table {{ border-collapse: collapse; width: 100%; }}
-                th, td {{ border: 1px solid #ccc; padding: 8px; text-align: left; font-size: 13px; }}
-                th {{ background: #f0f0f0; }}
-                .completed {{ color: green; }}
-                .processing {{ color: orange; }}
-                .pending {{ color: gray; }}
+                * {{ box-sizing: border-box; }}
+                body {{ 
+                    font-family: 'Segoe UI', Arial, sans-serif; 
+                    padding: 28px 36px; 
+                    background: #f7f8fa; 
+                    color: #333;
+                }}
+                h2 {{ 
+                    font-size: 20px; 
+                    font-weight: 600; 
+                    margin-bottom: 20px; 
+                    color: #1a1a2e;
+                }}
+                table {{ 
+                    border-collapse: collapse; 
+                    width: 100%; 
+                    table-layout: fixed;
+                    background: #fff;
+                    border-radius: 8px;
+                    overflow: hidden;
+                    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+                }}
+                th {{ 
+                    background: #f0f2f5; 
+                    color: #555;
+                    font-size: 12px;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                    padding: 11px 14px; 
+                    border: 1px solid #e2e5ea;
+                    text-align: left;
+                    white-space: nowrap;
+                   
+                }}
+                td {{ 
+                    padding: 10px 14px; 
+                    font-size: 13px; 
+                    border: 1px solid #e2e5ea;
+                    color: #444;
+                    vertical-align: top;
+                    word-break: break-word;
+                }}
+                
+                button{{
+                    margin: 0;
+                    font-size: 15px;
+                    padding: 5px 12px;
+                    border-radius: 6px;
+                    border: 1.5px solid #555e7a;
+                    transition: all 0.3s ease;
+                    cursor: pointer;
+                    color: #555e7a;
+                    background: #fff;
+                    text-decoration:none
+                }}
+                button:hover {{
+                    background: #555e7a;
+                    color: #fff;
+                }}
+                select {{
+                    cursor: pointer;
+                    padding: 5px 8px;
+                    border: 1px solid #ccc;
+                    border-radius: 4px;
+                    color: #444;
+                    background: #fff;
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                }}
+                select:focus {{
+                    outline: none;
+                    border-color: #555e7a;
+                    box-shadow: 0 0 0 3px rgba(85, 94, 122, 0.1);
+                }}
+                
+                input:focus {{
+                    outline: none;
+                    border-color: #555e7a;
+                    box-shadow: 0 0 0 3px rgba(85, 94, 122, 0.1);
+                    background: white;
+                }}
+                
+                input {{
+                    border: 1px solid #ccc;
+                    border-radius: 4px;
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                }}
+                
+                a {{
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                    display: inline-block;
+                    transition: all 0.2s ease;
+                }}
+                a:hover {{
+                    background: #555e7a;
+                    color: #fff !important;
+                    border-color: #555e7a;
+                    border-radius: 6px;
+                }}
+                
+                th:nth-child(1), td:nth-child(1)  {{ width: 105px; }}
+                th:nth-child(2), td:nth-child(2)  {{ width: 170px; }}
+                th:nth-child(3), td:nth-child(3)  {{ width: 90px; }}
+                th:nth-child(4), td:nth-child(4)  {{ width: 160px; }}
+                th:nth-child(5), td:nth-child(5)  {{ width: 185px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+                th:nth-child(6), td:nth-child(6)  {{ width: 55px; white-space: nowrap; }}
+                th:nth-child(7), td:nth-child(7)  {{ width: 210px; }}
+                th:nth-child(8), td:nth-child(8)  {{ width: 55px;  }}
+                th:nth-child(9), td:nth-child(9)  {{ width: 85px; white-space: nowrap; }}
+                th:nth-child(10), td:nth-child(10) {{ width: 85px; white-space: nowrap; }}
+                th:nth-child(11), td:nth-child(11) {{ width: 120px; }}
+                tbody tr:hover td {{ background: #f5f8ff; }}
+                .completed {{ color: #1a9e5c; font-weight: 500; }}
+                .processing {{ color: #d48800; font-weight: 500; }}
+                .pending {{ color: #999; font-weight: 500; }}
             </style>
         </head>
         
         <body>
             <h2>訂單報表</h2>
 
-            <form method="get" action="/orders" style="margin-bottom:20px;">
+            <form method="get" action="/orders" style="margin-bottom:20px; display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
             
                 <input type="text" name="order_id" placeholder="輸入訂單單號" 
                     value="{order_id_query if order_id_query else ''}"
-                    style="padding:5px; width:200px;">
+                    style="padding:5px; width:200px; font-family: 'Segoe UI', Arial, sans-serif;">
                     
                 <input type="text" name="title" placeholder="輸入產品名稱" 
                     value="{title_query if title_query else ''}"
-                    style="padding:5px; width:200px;">
+                    style="padding:5px; width:200px;font-family: 'Segoe UI', Arial, sans-serif; ">
                     
                 <input type="text" name="vendor" placeholder="輸入廠商代號" 
                     value="{Vendor_query if Vendor_query else ''}"
-                    style="padding:5px; width:200px;">
+                    style="padding:5px; width:200px; font-family: 'Segoe UI', Arial, sans-serif;">
                     
-                <select name="status" style="padding:5px;">
+                <select name="status" style="padding:5px; font-family: 'Segoe UI', Arial, sans-serif;">
                     <option value="">全部狀態</option>
                     <option value="pending" { "selected" if status_query == 'pending' else '' }>Pending</option>
                     <option value="processing" { "selected" if status_query == 'processing' else '' }>Processing</option>
@@ -568,16 +903,16 @@ def orders():
                 
                 <input type="date" name="date_from"
                     value="{date_from or ''}"
-                    style="padding:5px;">
+                    style="padding:5px; font-family: 'Segoe UI', Arial, sans-serif;">
                     
                 <span>～</span>
                 
                 <input type="date" name="date_to"
                     value="{date_to or ''}"
-                    style="padding:5px;">
+                    style="padding:5px; font-family: 'Segoe UI', Arial, sans-serif;">
                     
                 <button type="submit">搜尋</button>
-                <a href="/orders" style="padding:5px 12px; text-decoration:none; border:1px solid #ccc; border-radius:3px;">清除</a>
+                <a href="/orders" style="padding:5px 12px; text-decoration:none; border:1.5px solid #555e7a; border-radius:6px; color:#555e7a; font-size:14px;">清除</a>
             </form>
             <table>
                 <tr>
@@ -622,27 +957,44 @@ def test_line_items():
     if not order_id_query:
         return "請提供 order_id，例如 /test_line_items?order_id=20263"
 
-    with sqlite3.connect("orders.db") as conn:
+    with sqlite3.connect("orders.db", timeout=30) as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT Trans_id, status, line_items_id
+            SELECT line_items_id, status
             FROM orders
             WHERE order_id = ?
         """, (order_id_query,))
         rows = cursor.fetchall()
+ 
 
-    if not rows:
-        return f"訂單 {order_id_query} 找不到任何資料"
+        if not rows:
+            return f"訂單 {order_id_query} 找不到任何資料"
 
-    Trans_id = [r[0] for r in rows]
-    statuses = [r[1] for r in rows]
+        line_item_ids = [r[0] for r in rows]
+        statuses = [r[1] for r in rows]
 
-    return f"""
-    訂單: {order_id_query} <br>
-    Trans_id: {Trans_id} <br>
-    狀態: {statuses} <br>
-    可以用這些 line_item_ids 測試 Cyberbiz API
-    """
+        return f"""
+        訂單: {order_id_query} <br>
+        line_item_ids: {line_item_ids} <br>
+        狀態: {statuses} <br>
+        可以用這些 line_item_ids 測試 Cyberbiz API
+        """
+        
+@app.route("/retry/<trans_id>")
+def retry(trans_id):
+    with sqlite3.connect("orders.db", timeout=30) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT order_id_for_close_cyberbiz FROM orders WHERE Trans_id=?", (trans_id,))
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"error": "找不到訂單"})
+        close_id = row[0]
+    
+    t = threading.Thread(target=poll_lpa, args=(trans_id, close_id))
+    t.daemon = True
+    t.start()
+    return jsonify({"status": "ok", "message": f"重新觸發 {trans_id}"})
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=True)
