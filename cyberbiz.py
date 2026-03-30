@@ -456,7 +456,7 @@ def JOYTEL_order_esim(order_id, planCode, email, trans_id , order_id_for_close_c
     try:
         response=requests.post(JOYTEL_SUBSCRIBE_API,json=payload,headers=headers,timeout=10)
         
-        if response.json().get("code")==1:
+        if response.json().get("code")==0:
             logging.info(f"訂購請求成功 order_id={order_id} planCode={planCode} trans_id={trans_id}")
             with sqlite3.connect("orders.db", timeout=30) as conn:
                 cursor = conn.cursor()
