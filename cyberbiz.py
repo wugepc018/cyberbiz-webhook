@@ -346,18 +346,18 @@ def query_lpa(trans_id):
         
 def poll_lpa(trans_id, order_id_for_close_cyberbiz):
     qrcode_list=[]
-    for i in range(288):
+    for i in range(144):
         result = query_lpa(trans_id)
 
         if not result:
             logging.info(f"第{i+1}次查詢 result=None，sleep 600s")
-            time.sleep(300)
+            time.sleep(600)
             continue
 
         product_id, qrcodes_lpa, cid = result
         if not qrcodes_lpa or not cid:
             logging.info(f"第{i+1}次查詢 qrcode或cid為空，sleep 600s")
-            time.sleep(300)
+            time.sleep(600)
             continue
         lpa = qrcodes_lpa[0]
         cid = cid[0]
@@ -558,7 +558,7 @@ def poll_joytel(trans_id, orderTid, order_id_for_close_cyberbiz, orderCode):
         result = JOYEL_query_QrCode(orderCode, orderTid)
         
         if not result:
-            logging.info(f"第{i+1}次查詢 JOYTEL，尚未完成，sleep 600s")
+            logging.info(f"第{i+1}次查詢 JOYTEL，尚未完成，sleep 300s")
             time.sleep(300)
             continue
         
