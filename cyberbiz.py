@@ -454,7 +454,7 @@ def JOYTEL_order_esim(order_id, planCode, email, trans_id , order_id_for_close_c
         
     }
     try:
-        response=requests.post(JOYTEL_SUBSCRIBE_API,json=payload,headers=headers,timeout=10)
+        response=requests.post(JOYTEL_SUBSCRIBE_API,json=payload,headers=headers,timeout=30)
         
         if response.json().get("code")==0:
             logging.info(f"訂購請求成功 order_id={order_id} planCode={planCode} trans_id={trans_id}")
@@ -528,7 +528,7 @@ def JOYEL_query_QrCode(orderCode,orderTid):
         
     }
     try:
-        response = requests.post(JOYTEL_query_API, json=payload, headers=headers, timeout=10)
+        response = requests.post(JOYTEL_query_API, json=payload, headers=headers, timeout=30)
         data = response.json()
         logging.info(f"JOYTEL 查詢回應: {response.text}")
         
