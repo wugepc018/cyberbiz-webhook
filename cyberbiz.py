@@ -583,6 +583,7 @@ def poll_joytel(trans_id, orderTid, order_id_for_close_cyberbiz, orderCode):
             cursor.execute("UPDATE orders SET status='completed', qrcode=? WHERE Trans_id=?", (qrcode_img, trans_id))
             conn.commit()
             
+            logging.info(f"JOYTEL 單張完成 trans_id={trans_id} sn_code={sn_code}") 
             cursor.execute("""
                 SELECT COUNT(*) FROM orders
                 WHERE order_id = ? AND line_items_id = ? AND status != 'completed'
@@ -590,25 +591,10 @@ def poll_joytel(trans_id, orderTid, order_id_for_close_cyberbiz, orderCode):
             remaining = cursor.fetchone()[0]
             
             if remaining == 0:
-                cursor.execute("""
-                    SELECT qrcode, qty_index, Trans_id FROM orders
-                    WHERE order_id = ? AND line_items_id = ? ORDER BY qty_index ASC
-                """, (order_id, line_items_id))
-                qrcode_rows = cursor.fetchall()
-                qrcode_list = [r[0] for r in qrcode_rows]
-                trans_id_list = [r[2] for r in qrcode_rows]
-                
-                cid_list = []
-                for tid in trans_id_list:
-                    cursor.execute("SELECT CID FROM CID_TABLE WHERE Trans_id = ?", (tid,))
-                    cid_row = cursor.fetchone()
-                    cid_list.append(cid_row[0] if cid_row else None)
-                
-                send_order_email(email, qrcode_list, full_title, cid_list=cid_list)
-            
-        logging.info(f"JOYTEL 訂購完成 order_id={order_id} trans_id={trans_id}")
-        check_and_close_order(order_id, order_id_for_close_cyberbiz)
-        break
+                logging.info(f"JOYTEL 訂購完成 order_id={order_id} trans_id={trans_id}")
+                check_and_close_order(order_id, order_id_for_close_cyberbiz)
+            break
+        
 def generate_qrcode(qrcodes_lpa):
     img = qrcode.make(qrcodes_lpa)
       
