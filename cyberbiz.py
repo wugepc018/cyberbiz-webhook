@@ -30,7 +30,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
-AUTO_VENDOR = ["AUTO001", "AUTO002", "AUTO003"]
+AUTO_VENDOR = ["AUTO001", "AUTO002", "AUTO003", "AUTO004"]
 APP_ID = os.environ.get("APP_ID")
 APP_SECRET = os.environ.get("APP_SECRET")
 CYBERBIZ_USERNAME = os.environ.get("CYBERBIZ_USERNAME")
@@ -39,6 +39,8 @@ CYBERBIZ_TOKEN = os.environ.get("CYBERBIZ_TOKEN")
 FTC_API_KEY=os.environ.get("x_api_key")
 VENDOR3_CUSTOMER_CODE = os.environ.get("VENDOR3_CUSTOMER_CODE") 
 VENDOR3_CUSTOMER_AUTH = os.environ.get("VENDOR3_CUSTOMER_AUTH") 
+VENDOR4_AccessSecret=os.environ.get("VENDOR4_AccessSecret") 
+VENDOR4_Access_Key=os.environ.get("Access_Key") 
 
 def init_db():
     with sqlite3.connect("orders.db", timeout=30) as conn:
@@ -64,7 +66,8 @@ def init_db():
         PRICE INTEGER,
         USE_DATE INTEGER,
         MOBILE_NUMBER INTEGER,
-        CUSTOMER_NAME TEXT
+        CUSTOMER_NAME TEXT,
+        BUSINESSN TEXT
         )
         """)
         cursor.execute("PRAGMA table_info(orders)")
@@ -91,6 +94,8 @@ def init_db():
         
         if "PRICE" not in columns:
             cursor.execute("ALTER TABLE orders ADD COLUMN PRICE INTEGER")
+        if "BUSINESSN" not in columns:
+            cursor.execute("ALTER TABLE orders ADD COLUMN BUSINESSN TEXT")
             
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS CID_TABLE (
@@ -173,11 +178,11 @@ def cyberbiz_order():
                         """INSERT INTO orders 
                             (order_id, Created_AT, Trans_id, PlanCode, email, product_id, qc, 
                             status, qrcode, Title, qty_index, QUANTITY, order_id_for_close_cyberbiz, 
-                            NOTE, line_items_id, PRICE, USE_DATE, MOBILE_NUMBER, CUSTOMER_NAME) 
-                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                            NOTE, line_items_id, PRICE, USE_DATE, MOBILE_NUMBER, CUSTOMER_NAME, BUSINESSN) 
+                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                             (order_id, created_at, trans_id, sku, email, product_id, qc,
                             "pending", None, full_title, qty_index, quantity, order_id_for_close_cyberbiz, 
-                            note, line_items_id, price, use_date, mobile_number, Customer_name)
+                            note, line_items_id, price, use_date, mobile_number, Customer_name, None)
                     )
                     tasks.append((order_id, sku, email, trans_id, order_id_for_close_cyberbiz, qc))
                 
@@ -191,6 +196,8 @@ def cyberbiz_order():
             FTC_order_esim(order_id_, sku_, email_, trans_id_, close_id_)
         elif qc_ == "AUTO003":
             JOYTEL_order_esim(order_id_, sku_, email_, trans_id_, close_id_)
+        elif qc_ == "AUTO004":
+            Diysim_order_esim(order_id_, sku_, email_, trans_id_, close_id_)
             
     return jsonify({
         "status": "ok",
@@ -229,6 +236,61 @@ def order_esim(order_id, planCode, email, trans_id , order_id_for_close_cyberbiz
         
         if response.json().get("code")=="000":
             logging.info(f"訂購請求成功 order_id={order_id} planCode={planCode} trans_id={trans_id}")
+        
+        else:
+            logging.error(f"供應商回應失敗 code={response.json().get('code')} 內容={response.text}") 
+            with sqlite3.connect("orders.db", timeout=30) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE orders SET status = 'pending' WHERE Trans_id = ?",
+                    (trans_id,)
+                )
+                conn.commit()
+            
+    except Exception as e:
+        logging.error(f"呼叫供應商API失敗: {e}")
+
+#Diysim的訂購esim api
+Base_Diysim_URL="https://diysim.com.hk"
+def Diysim_order_esim(order_id, planCode, email, trans_id , order_id_for_close_cyberbiz):
+    Diysim_SUBSCRIBE_API=f"{Base_Diysim_URL}/api/order/subscribe"
+    timestamp = str(int(time.time() * 1000))  
+    request_id = trans_id
+    with sqlite3.connect("orders.db", timeout=30) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE orders SET status = 'processing' WHERE Trans_id = ? AND status = 'pending'",
+            (trans_id,)
+        )
+        conn.commit()
+    
+    payload = {
+        "productCode": planCode,
+        "customerEmail": email
+    }
+    request_body = json.dumps(payload, separators=(',', ':'))
+    raw = timestamp + request_id + request_body + VENDOR4_AccessSecret
+    signature = hashlib.sha256(raw.encode()).hexdigest()
+    headers = {
+        "Access-Key": VENDOR4_Access_Key,
+        "Signature": signature,
+        "Request-Id": trans_id,
+        "Timestamp": timestamp,
+    }
+    try:
+        response=requests.post(Diysim_SUBSCRIBE_API,json=payload,headers=headers,timeout=10)
+        
+        if response.json().get("code")==0:
+            data=response.json().get("data")
+            businessSn=data.get("businessSn")
+            logging.info(f"訂購請求成功 order_id={businessSn} planCode={planCode} trans_id={trans_id}")
+            with sqlite3.connect("orders.db", timeout=30) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE orders SET status = 'processing', BUSINESSN = ? WHERE Trans_id = ? AND status = 'processing'",
+                    (businessSn, trans_id)
+                )
+                conn.commit()
         
         else:
             logging.error(f"供應商回應失敗 code={response.json().get('code')} 內容={response.text}") 
@@ -604,7 +666,7 @@ def generate_qrcode(qrcodes_lpa):
 
     return imgByte.read()
     
-#接收供應商傳來的esim資訊
+#接RSP收供應商傳來的esim資訊
 @app.route("/notify/esim/plan/subscribe", methods=["POST"])
 def notify_esim():
     
@@ -694,6 +756,68 @@ def notify_esim():
     logging.info(f"訂購esim完成 order_id={order_id} trans_id={trans_id}")
     check_and_close_order(order_id, order_id_for_close_cyberbiz)
     return jsonify({"code": "000", "mesg": "success"})
+
+#接收Diysim供應商傳來的esim資訊
+@app.route("/notify_api/Diysim_esim/plan/subscribe", methods=["POST"])
+def Diysim_notify_esim():
+    
+    data=request.json
+    logging.info("eSIM訂購通知收到:")
+    logging.info(json.dumps(data, indent=2, ensure_ascii=False))
+    result_code=data.get("code")
+    esim_data=data.get("data", {})
+    cid= str(esim_data.get("iccid"))
+    businessSn=esim_data.get("businessSn")
+    
+    if result_code!=0:
+        logging.error(f" 訂購失敗：{data.get('mesg')}")
+        return jsonify({
+            "code": "999",
+            "mesg": "System Error"
+        })
+
+    logging.info(f"CID: {cid}")
+    logging.info(f"businessSn: {businessSn}")
+    
+    with sqlite3.connect("orders.db", timeout=30) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT email, Title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id, Trans_id
+            FROM orders 
+            WHERE BUSINESSN = ? AND status = 'processing'
+        """, (businessSn,))
+        
+        row = cursor.fetchone()
+        
+        if not row:
+            logging.error(f"找不到 BUSINESSN={businessSn} 對應的訂單")
+            return jsonify({"code": "999", "mesg": "Failed"})
+        
+        email, full_title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id, trans_id= row
+
+        cursor.execute(
+            "UPDATE orders SET status='completed' WHERE BUSINESSN=?",
+            ( businessSn,)
+        )
+        cursor.execute(
+            "INSERT INTO CID_TABLE (CID, Trans_id) VALUES (?, ?)", (cid, trans_id)
+        )
+        
+        conn.commit()
+        
+        cursor.execute("""
+            SELECT COUNT(*) FROM orders
+            WHERE order_id = ? AND line_items_id = ? AND status != 'completed'
+        """, (order_id, line_items_id))
+        
+        remaining_in_item = cursor.fetchone()[0]
+        if remaining_in_item == 0:
+            logging.info(f"Diysim 訂購完成 order_id={order_id} trans_id={trans_id}")
+            check_and_close_order(order_id, order_id_for_close_cyberbiz)
+        else:
+       
+            logging.info(f"line_items_id={line_items_id} 尚有 {remaining_in_item} 筆未完成，等待中")
+    return jsonify({"code": "0", "mesg": "Success"})
     
 def add_text_to_QRcode(qrcode_url, product_name, cid=None):
     if isinstance(qrcode_url, bytes):
