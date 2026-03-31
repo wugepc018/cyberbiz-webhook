@@ -271,14 +271,17 @@ def Diysim_order_esim(order_id, planCode, email, trans_id , order_id_for_close_c
     request_body = json.dumps(payload, separators=(',', ':'))
     raw = timestamp + request_id + request_body + VENDOR4_AccessSecret
     signature = hashlib.sha256(raw.encode()).hexdigest()
+    logging.info(f"VENDOR4_Access_Key: {VENDOR4_Access_Key}")
+    logging.info(f"VENDOR4_AccessSecret 長度: {len(VENDOR4_AccessSecret) if VENDOR4_AccessSecret else 'None'}")
     headers = {
         "Access-Key": VENDOR4_Access_Key,
         "Signature": signature,
         "Request-Id": trans_id,
         "Timestamp": timestamp,
+        "Content-Type": "application/json",
     }
     try:
-        response=requests.post(Diysim_SUBSCRIBE_API,json=payload,headers=headers,timeout=10)
+        response=requests.post(Diysim_SUBSCRIBE_API,data=request_body,headers=headers,timeout=10)
         
         if response.json().get("code")==0:
             data=response.json().get("data")
