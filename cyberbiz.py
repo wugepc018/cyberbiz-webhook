@@ -253,7 +253,7 @@ def order_esim(order_id, planCode, email, trans_id , order_id_for_close_cyberbiz
 #Diysim的訂購esim api
 Base_Diysim_URL="https://diysim.com.hk"
 def Diysim_order_esim(order_id, planCode, email, trans_id , order_id_for_close_cyberbiz):
-    Diysim_SUBSCRIBE_API=f"{Base_Diysim_URL}/api/order/subscribe"
+    Diysim_SUBSCRIBE_API=f"{Base_Diysim_URL}/api/order/subscribe/esim"
     timestamp = str(int(time.time() * 1000))  
     request_id = trans_id
     with sqlite3.connect("orders.db", timeout=30) as conn:
