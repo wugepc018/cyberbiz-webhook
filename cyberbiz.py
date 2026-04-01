@@ -1047,7 +1047,7 @@ def orders():
             WHERE 1=1
         """
         params = []
-
+        amount_params = []
         if order_id_query:
             sql += " AND o.order_id = ?"
             params.append(order_id_query)
@@ -1078,7 +1078,7 @@ def orders():
         total = cursor.fetchone()[0]
         
         total_amount_sql = "SELECT SUM(o.PRICE) FROM orders o LEFT JOIN CID_TABLE c ON o.Trans_id = c.Trans_id WHERE 1=1"
-        cursor.execute(total_amount_sql, params)
+        cursor.execute(total_amount_sql, amount_params)
         total_amount = cursor.fetchone()[0] or 0
         
         total_pages = max(1, (total + per_page - 1) // per_page)
