@@ -1077,8 +1077,8 @@ def orders():
         cursor.execute(count_sql, params)
         total = cursor.fetchone()[0]
         
-        sum_sql = f"SELECT SUM(o.PRICE) FROM ({sql})"
-        cursor.execute(sum_sql, params)
+        total_amount_sql = "SELECT SUM(o.PRICE) FROM orders o LEFT JOIN CID_TABLE c ON o.Trans_id = c.Trans_id WHERE 1=1"
+        cursor.execute(total_amount_sql, params)
         total_amount = cursor.fetchone()[0] or 0
         
         total_pages = max(1, (total + per_page - 1) // per_page)
