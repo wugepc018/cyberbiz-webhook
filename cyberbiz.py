@@ -237,12 +237,21 @@ def order_esim(order_id, planCode, email, trans_id , order_id_for_close_cyberbiz
         if response.json().get("code")=="000":
             logging.info(f"訂購請求成功 order_id={order_id} planCode={planCode} trans_id={trans_id}")
         
+        elif response.json().get("code")=="999":
+            logging.error(f"供應商回應失敗 code={response.json().get('code')} 內容={response.text}") 
+            with sqlite3.connect("orders.db", timeout=30) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE orders SET status = 'Failed' WHERE Trans_id = ?",
+                    (trans_id,)
+                )
+                conn.commit()
         else:
             logging.error(f"供應商回應失敗 code={response.json().get('code')} 內容={response.text}") 
             with sqlite3.connect("orders.db", timeout=30) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "UPDATE orders SET status = 'pending' WHERE Trans_id = ?",
+                    "UPDATE orders SET status = 'Pending' WHERE Trans_id = ?",
                     (trans_id,)
                 )
                 conn.commit()
@@ -295,12 +304,21 @@ def Diysim_order_esim(order_id, planCode, email, trans_id , order_id_for_close_c
                 )
                 conn.commit()
         
+        elif response.json().get("code")==5:
+            logging.error(f"供應商回應失敗 code={response.json().get('code')} 內容={response.text}") 
+            with sqlite3.connect("orders.db", timeout=30) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE orders SET status = 'Failed' WHERE Trans_id = ?",
+                    (trans_id,)
+                )
+                conn.commit()
         else:
             logging.error(f"供應商回應失敗 code={response.json().get('code')} 內容={response.text}") 
             with sqlite3.connect("orders.db", timeout=30) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "UPDATE orders SET status = 'pending' WHERE Trans_id = ?",
+                    "UPDATE orders SET status = 'Pending' WHERE Trans_id = ?",
                     (trans_id,)
                 )
                 conn.commit()
@@ -1183,7 +1201,8 @@ def orders():
                 th:nth-child(11), td:nth-child(11) {{ width: 120px; }}
                 tbody tr:hover td {{ background: #f5f8ff; }}
                 .completed {{ color: #1a9e5c; font-weight: 500; }}
-                .processing {{ color: #d48800; font-weight: 500; }}
+                .Failed {{ color: #d48800; font-weight: 500; }}
+                .processing {{ color: #FF4D4D; font-weight: 500; }}
                 .pending {{ color: #999; font-weight: 500; }}
             </style>
         </head>
@@ -1209,6 +1228,7 @@ def orders():
                     <option value="">全部狀態</option>
                     <option value="pending" { "selected" if status_query == 'pending' else '' }>Pending</option>
                     <option value="processing" { "selected" if status_query == 'processing' else '' }>Processing</option>
+                    <option value="Failed" { "selected" if status_query == 'Failed' else '' }>Failed</option>
                     <option value="completed" { "selected" if status_query == 'completed' else '' }>Completed</option>
                 </select>
                 
