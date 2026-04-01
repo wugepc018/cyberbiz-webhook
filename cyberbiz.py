@@ -239,11 +239,18 @@ def order_esim(order_id, planCode, email, trans_id , order_id_for_close_cyberbiz
         
         elif response.json().get("code")=="999":
             logging.error(f"供應商回應失敗 code={response.json().get('code')} 內容={response.text}") 
+            try:
+                res_json = response.json()
+                error_msg = res_json.get("message") or res_json.get("msg") or response.text
+            except Exception:
+                error_msg = response.text
+
+            error_msg = error_msg[:200]
             with sqlite3.connect("orders.db", timeout=30) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "UPDATE orders SET status = 'Failed' WHERE Trans_id = ?",
-                    (trans_id,)
+                    "UPDATE orders SET status = 'Failed', NOTE= ? WHERE Trans_id = ? AND status != 'completed'",
+                    (error_msg,trans_id,)
                 )
                 conn.commit()
         else:
@@ -306,11 +313,18 @@ def Diysim_order_esim(order_id, planCode, email, trans_id , order_id_for_close_c
         
         elif response.json().get("code")==5:
             logging.error(f"供應商回應失敗 code={response.json().get('code')} 內容={response.text}") 
+            try:
+                res_json = response.json()
+                error_msg = res_json.get("message") or res_json.get("msg") or response.text
+            except Exception:
+                error_msg = response.text
+
+            error_msg = error_msg[:200]
             with sqlite3.connect("orders.db", timeout=30) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "UPDATE orders SET status = 'Failed' WHERE Trans_id = ?",
-                    (trans_id,)
+                    "UPDATE orders SET status = 'Failed', NOTE= ? WHERE Trans_id = ? AND status != 'completed'",
+                    (error_msg,trans_id,)
                 )
                 conn.commit()
         else:
