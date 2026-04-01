@@ -1368,7 +1368,7 @@ def download_report():
     with sqlite3.connect("orders.db", timeout=30) as conn:
         cursor = conn.cursor()
         sql = """
-            SELECT o.order_id, o.Created_AT, o.PlanCode, o.email, o.status, o.qc, o.Title, c.CID, o.NOTE, o.PRICE
+            SELECT o.Created_AT, o.email, o.order_id, o.Title, c.CID, o.PlanCode, o.PRICE, o.qc, o.status, o.NOTE
             FROM orders o
             LEFT JOIN CID_TABLE c ON o.Trans_id = c.Trans_id
             WHERE 1=1
