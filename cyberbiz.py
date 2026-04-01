@@ -1289,8 +1289,8 @@ def orders():
                 ⬇ 下載 Excel
                 </a>
             </div>
-            <div style="margin:10px 0; display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-weight:bold;">總金額：{total_amount}</span>
+            <div style="margin:10px 0; text-align:right; font-weight:bold;">
+                總金額：{total_amount}
             </div>
             <table>
                 <tr>
