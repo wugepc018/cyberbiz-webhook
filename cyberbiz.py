@@ -23,6 +23,9 @@ import datetime
 import qrcode
 import threading
 import random
+from flask import send_file, request
+from openpyxl import Workbook
+from io import BytesIO
 
 #LOG_PATH = "/root/app/cyberbiz-webhook/logs/webhook.log"
 logging.basicConfig(
@@ -1037,6 +1040,12 @@ def orders():
             LEFT JOIN CID_TABLE c ON o.Trans_id = c.Trans_id
             WHERE 1=1
         """
+        
+        query = """
+            SELECT SUM(cost)
+            FROM orders
+            WHERE 1=1
+        """
         params = []
 
         if order_id_query:
@@ -1067,6 +1076,11 @@ def orders():
         count_sql = f"SELECT COUNT(*) FROM ({sql})"
         cursor.execute(count_sql, params)
         total = cursor.fetchone()[0]
+        
+        sum_sql = f"SELECT SUM(o.PRICE) FROM ({sql})"
+        cursor.execute(sum_sql, params)
+        total_amount = cursor.fetchone()[0] or 0
+        
         total_pages = max(1, (total + per_page - 1) // per_page)
         sql += " LIMIT ? OFFSET ?"
         params.append(per_page)
@@ -1258,7 +1272,26 @@ def orders():
                     
                 <button type="submit">搜尋</button>
                 <a href="/orders" style="padding:5px 12px; text-decoration:none; border:1.5px solid #555e7a; border-radius:6px; color:#555e7a; font-size:14px;">清除</a>
+                
             </form>
+            
+            <div style="margin-bottom:15px; display:flex; justify-content:flex-end;">
+                <a href="/orders/export?order_id={order_id_query or ''}&status={status_query or ''}&title={title_query or ''}&vendor={Vendor_query or ''}&date_from={date_from or ''}&date_to={date_to or ''}"
+                style="
+                        padding:6px 14px;
+                        border:1.5px solid #1a9e5c;
+                        border-radius:6px;
+                        color:#1a9e5c;
+                        text-decoration:none;
+                        font-size:14px;
+                        font-weight:500;
+                ">
+                ⬇ 下載 Excel
+                </a>
+            </div>
+            <div style="margin:10px 0; font-weight:bold;">
+                總筆數：{total} ｜ 總金額：{total_amount}
+            </div>
             <table>
                 <tr>
                     <th>訂購日期</th>
@@ -1324,7 +1357,74 @@ def test_line_items():
         狀態: {statuses} <br>
         可以用這些 line_item_ids 測試 Cyberbiz API
         """
+       
+@app.route("/download_report")
+def download_report():
+    order_id_query = request.args.get("order_id")  
+    status_query = request.args.get("status")  
+    title_query = request.args.get("title")  
+    Vendor_query = request.args.get("vendor")  
+    date_from = request.args.get("date_from")  
+    date_to = request.args.get("date_to")  
+                              
+    with sqlite3.connect("orders.db", timeout=30) as conn:
+        cursor = conn.cursor()
+        sql = """
+            SELECT o.order_id, o.Created_AT, o.PlanCode, o.email, o.status, o.qc, o.Title, c.CID, o.NOTE, o.PRICE
+            FROM orders o
+            LEFT JOIN CID_TABLE c ON o.Trans_id = c.Trans_id
+            WHERE 1=1
+        """
+        params = []
+
+        if order_id_query:
+            sql += " AND o.order_id = ?"
+            params.append(order_id_query)
+
+        if status_query:
+            sql += " AND o.status = ?"
+            params.append(status_query)
+
+        if title_query:
+            sql += " AND o.Title LIKE ?"
+            params.append(f"%{title_query}%")
+            
+        if Vendor_query:
+            sql += " AND o.qc = ?"
+            params.append(Vendor_query)
+            
+        if date_from:
+            sql += " AND o.Created_AT >= ?"
+            params.append(date_from)
+
+        if date_to:
+            sql += " AND o.Created_AT <= ?"
+            params.append(date_to + "T23:59:59")  
+            
+        sql += " ORDER BY o.rowid DESC"
         
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+        
+    wb=Workbook()
+    ws=wb.active
+    ws.title="訂單報表" 
+    ws.append([
+        "Created_AT", "Email", "Order_ID", "Title", "CID",
+        "PlanCode", "Price", "Vendor", "Status", "Note"
+    ])
+    for r in rows:
+        ws.append(r)
+    output=BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name="orders_report.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 @app.route("/retry/<trans_id>")
 def retry(trans_id):
     with sqlite3.connect("orders.db", timeout=30) as conn:
