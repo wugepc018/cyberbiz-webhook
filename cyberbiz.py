@@ -1276,6 +1276,7 @@ def orders():
             </form>
             
             <div style="margin-bottom:15px; display:flex; justify-content:flex-end;">
+                <span style="font-weight:bold;">總金額：{total_amount}</span>
                 <a href="/orders/export?order_id={order_id_query or ''}&status={status_query or ''}&title={title_query or ''}&vendor={Vendor_query or ''}&date_from={date_from or ''}&date_to={date_to or ''}"
                 style="
                         padding:6px 14px;
@@ -1288,9 +1289,6 @@ def orders():
                 ">
                 ⬇ 下載 Excel
                 </a>
-            </div>
-            <div style="margin:10px 0; text-align:right; font-weight:bold;">
-                總金額：{total_amount}
             </div>
             <table>
                 <tr>
