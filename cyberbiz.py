@@ -1040,37 +1040,38 @@ def orders():
             LEFT JOIN CID_TABLE c ON o.Trans_id = c.Trans_id
             WHERE 1=1
         """
-        
-        query = """
-            SELECT SUM(cost)
-            FROM orders
-            WHERE 1=1
-        """
+    
         params = []
         amount_params = []
         if order_id_query:
             sql += " AND o.order_id = ?"
             params.append(order_id_query)
-
+            amount_params.append(order_id_query)
+            
         if status_query:
             sql += " AND o.status = ?"
             params.append(status_query)
+            amount_params.append(status_query)
 
         if title_query:
             sql += " AND o.Title LIKE ?"
             params.append(f"%{title_query}%")
+            amount_params.append(f"%{title_query}%")
             
         if Vendor_query:
             sql += " AND o.qc = ?"
             params.append(Vendor_query)
+            amount_params.append(Vendor_query)
             
         if date_from:
             sql += " AND o.Created_AT >= ?"
             params.append(date_from)
+            amount_params.append(date_from)
 
         if date_to:
             sql += " AND o.Created_AT <= ?"
             params.append(date_to + "T23:59:59")  
+            amount_params.append(date_to + "T23:59:59")
             
         sql += " ORDER BY o.rowid DESC"
         count_sql = f"SELECT COUNT(*) FROM ({sql})"
@@ -1078,6 +1079,18 @@ def orders():
         total = cursor.fetchone()[0]
         
         total_amount_sql = "SELECT SUM(o.PRICE) FROM orders o LEFT JOIN CID_TABLE c ON o.Trans_id = c.Trans_id WHERE 1=1"
+        if order_id_query:
+            total_amount_sql += " AND o.order_id = ?"
+        if status_query:
+            total_amount_sql += " AND o.status = ?"
+        if title_query:
+            total_amount_sql += " AND o.Title LIKE ?"
+        if Vendor_query:
+            total_amount_sql += " AND o.qc = ?"
+        if date_from:
+            total_amount_sql += " AND o.Created_AT >= ?"
+        if date_to:
+            total_amount_sql += " AND o.Created_AT <= ?"
         cursor.execute(total_amount_sql, amount_params)
         total_amount = cursor.fetchone()[0] or 0
         
