@@ -148,47 +148,49 @@ def cyberbiz_order():
 
         for item in line_items:
             qc=item.get("qc")
-            sku=item.get("sku")
 
             if qc not in AUTO_VENDOR:
                 logging.info(f"訂單 {order_id} 含有非AUTO_VENDOR商品，整筆跳過")
                 logging.info(f"訂單 {order_id} 需要人工處理")
                 return jsonify({"status": "ok"})
-            else:
-                title=item.get("title")
-                product_id=item.get("product_id")
-                line_items_id=item.get("id")
-                variant_title=item.get("variant_title")
-                quantity=item.get("quantity")
-                try:
-                    price = item.get("price") or 0
-                except (TypeError, ValueError):
-                    price = 0
-                logging.info(f"Product ID: {product_id}")
-                logging.info(f"廠商編號: {qc}")
-                logging.info(f"產品名稱: {title}")
-                logging.info(f"產品類型: {variant_title}")
-                logging.info(f"產品代號: {sku}")
-                logging.info(f"備註欄位: {note}")
-                full_title = f"{title} {variant_title}" if variant_title else title
-                for i in range(quantity):
-                    trans_id = str(uuid.uuid4()).replace("-", "")[:20]
-                    auto_count += 1 
-                    qty_index = existing_count + auto_count
-                    today = datetime.datetime.now() #日期寫死 
-                    use_date = int(today.timestamp())
-                    cursor.execute(
-                        """INSERT INTO orders 
-                            (order_id, Created_AT, Trans_id, PlanCode, email, product_id, qc, 
-                            status, qrcode, Title, qty_index, QUANTITY, order_id_for_close_cyberbiz, 
-                            NOTE, line_items_id, PRICE, USE_DATE, MOBILE_NUMBER, CUSTOMER_NAME, BUSINESSN) 
-                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                            (order_id, created_at, trans_id, sku, email, product_id, qc,
-                            "pending", None, full_title, qty_index, quantity, order_id_for_close_cyberbiz, 
-                            note, line_items_id, price, use_date, mobile_number, Customer_name, None)
-                    )
-                    tasks.append((order_id, sku, email, trans_id, order_id_for_close_cyberbiz, qc))
-                
+        for item in line_items:   
+            qc=item.get("qc")
+            sku=item.get("sku")
+             
+            title=item.get("title")
+            product_id=item.get("product_id")
+            line_items_id=item.get("id")
+            variant_title=item.get("variant_title")
+            quantity=item.get("quantity")
+            try:
+                price = item.get("price") or 0
+            except (TypeError, ValueError):
+                price = 0
+            logging.info(f"Product ID: {product_id}")
+            logging.info(f"廠商編號: {qc}")
+            logging.info(f"產品名稱: {title}")
+            logging.info(f"產品類型: {variant_title}")
+            logging.info(f"產品代號: {sku}")
+            logging.info(f"備註欄位: {note}")
+            full_title = f"{title} {variant_title}" if variant_title else title
+            for i in range(quantity):
+                trans_id = str(uuid.uuid4()).replace("-", "")[:20]
+                auto_count += 1 
+                qty_index = existing_count + auto_count
+                today = datetime.datetime.now() #日期寫死 
+                use_date = int(today.timestamp())
+                cursor.execute(
+                    """INSERT INTO orders 
+                        (order_id, Created_AT, Trans_id, PlanCode, email, product_id, qc, 
+                        status, qrcode, Title, qty_index, QUANTITY, order_id_for_close_cyberbiz, 
+                        NOTE, line_items_id, PRICE, USE_DATE, MOBILE_NUMBER, CUSTOMER_NAME, BUSINESSN) 
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        (order_id, created_at, trans_id, sku, email, product_id, qc,
+                        "pending", None, full_title, qty_index, quantity, order_id_for_close_cyberbiz, 
+                        note, line_items_id, price, use_date, mobile_number, Customer_name, None)
+                )
+                tasks.append((order_id, sku, email, trans_id, order_id_for_close_cyberbiz, qc))
+            
         conn.commit()
         
     for task in tasks:
