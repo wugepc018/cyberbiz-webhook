@@ -543,7 +543,7 @@ def JOYTEL_order_esim(order_id, planCode, email, trans_id , order_id_for_close_c
         "phone": mobile_number,
         "timestamp": timestamp,
         "autoGraph": autoGraph,
-        "email": email,
+        "email": "wuge.esim@gmail.com",
         "itemList": [
             {
                 "productCode": planCode,
@@ -693,10 +693,31 @@ def poll_joytel(trans_id, orderTid, order_id_for_close_cyberbiz, orderCode):
             remaining = cursor.fetchone()[0]
             
             if remaining == 0:
-                logging.info(f"JOYTEL 訂購完成 order_id={order_id} trans_id={trans_id}")
-                check_and_close_order(order_id, order_id_for_close_cyberbiz)
-            break
+                
+                cursor.execute("""SELECT qrcode, qty_index, Trans_id FROM orders
+                    WHERE order_id = ? AND line_items_id = ?
+                    ORDER BY qty_index ASC
+                """, (order_id, line_items_id))
+                
+                qrcode_rows = cursor.fetchall()
+                qrcode_list = [r[0] for r in qrcode_rows]
+                trans_id_list = [r[2] for r in qrcode_rows]
+
+                cid_list = []
+                for tid in trans_id_list:
+                    cursor.execute("SELECT CID FROM CID_TABLE WHERE Trans_id = ?", (tid,))
+                    cid_row = cursor.fetchone()
+                    cid_list.append(cid_row[0] if cid_row else None)
+            
+                logging.info(f"line_items_id={line_items_id} 全部完成，寄送含 {len(qrcode_list)} 張 QR code 的信")
+                send_order_email(email, qrcode_list, full_title, cid_list=cid_list)
+            else:
         
+                logging.info(f"line_items_id={line_items_id} 尚有 {remaining} 筆未完成，等待中")
+
+        logging.info(f"訂購esim完成 order_id={order_id} trans_id={trans_id}")
+        check_and_close_order(order_id, order_id_for_close_cyberbiz)
+        break
 def generate_qrcode(qrcodes_lpa):
     img = qrcode.make(qrcodes_lpa)
       
