@@ -1379,7 +1379,7 @@ def Query_Status():
         <body>
             <h2>訂單報表</h2>
 
-            <form method="get" action="/orders" style="margin-bottom:20px; display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
+            <form method="get" action="/Query_Status" style="margin-bottom:20px; display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
             
                 <input type="text" name="order_id" placeholder="輸入CID" 
                     value="{CID_query if CID_query else ''}"
