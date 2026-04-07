@@ -1393,7 +1393,7 @@ def Query_Status():
         
             if response.json().get("code")=="000":
                 
-                logging.info("請求成功")
+                logging.info(f"請求成功 {response.text}")
                 status_result = response.json().get("data", {})
             else:
                 error_msg = f"狀態查詢失敗：{ response.json().get('mesg')}"
