@@ -1423,6 +1423,7 @@ def Query_Status():
             j2 = r2.json()
             if j2.get("code") == "000":
                 usage_result = j2.get("data", {}).get("quotaList", [])
+                logging.info(f"請求成功 {r2.text}")
         except Exception as e:
             logging.error(f"流量查詢異常：{e}")
                 
