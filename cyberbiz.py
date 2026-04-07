@@ -1464,13 +1464,11 @@ def Query_Status():
         
         for d in usage_result.get("dataUsageList", []):
             date = d.get("usageDate", "-")
-            mcc = d.get("mcc", "-")
-            mnc = d.get("mnc", "-")
+
             usage = fmt_bytes(d.get("usage", 0))
             usage_html += f"""
             <tr>
                 <td>{date}</td>
-                <td>{mcc} / {mnc}</td>
                 <td colspan='2'>{usage}</td>
             </tr>"""
             
@@ -1518,7 +1516,7 @@ def Query_Status():
         </form>
         {"<p style='color:red;'>⚠️ " + error_msg + "</p>" if error_msg else ""}
         {status_html}
-        {"<h3>用量明細</h3><table><tr><th>日期</th><th>MCC/MNC</th><th colspan='2'>用量</th></tr>" + usage_html + "</table>" if CID_query else ""}
+        {"<h3>用量明細</h3><table><tr><th>日期</th><th colspan='2'>用量</th></tr>" if CID_query else ""}
     </body>
     </html>
     """
