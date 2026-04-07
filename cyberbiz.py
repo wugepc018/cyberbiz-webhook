@@ -1151,6 +1151,7 @@ def orders():
         <head>
             <meta charset="utf-8">
             <title>訂單報表</title>
+            <link rel="icon" type="image/png" href="/favicon.png">
             <style>
                 * {{ box-sizing: border-box; }}
                 body {{ 
@@ -1474,6 +1475,9 @@ def retry(trans_id):
     t.start()
     return jsonify({"status": "ok", "message": f"重新觸發 {trans_id}"})
 
+@app.route("/favicon.png")
+def favicon():
+    return send_file("/root/app/cyberbiz-webhook/favicon.png", mimetype="image/png")
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=True)
