@@ -1363,6 +1363,43 @@ def orders():
 
     html += f"</table>{pagination}</body></html>"
     return html
+@app.route("/Query_Status")
+def Query_Status():
+    CID_query = request.args.get("order_id")  
+    
+    html = f"""
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Esim 狀態與用量查詢</title>
+            <link rel="icon" type="image/png" href="/favicon.png">
+            
+        </head>
+        
+        <body>
+            <h2>訂單報表</h2>
+
+            <form method="get" action="/orders" style="margin-bottom:20px; display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
+            
+                <input type="text" name="order_id" placeholder="輸入CID" 
+                    value="{CID_query if CID_query else ''}"
+                    style="padding:5px; width:200px; font-family: 'Segoe UI', Arial, sans-serif;">
+                    
+                    
+                <button type="submit">搜尋</button>
+                <a href="/orders" style="padding:5px 12px; text-decoration:none; border:1.5px solid #555e7a; border-radius:6px; color:#555e7a; font-size:14px;">清除</a>
+                
+            </form>
+            
+            <table>
+                <tr>
+                    <th>Esim使用狀態</th>
+                    <th>Esim 目前用量</th>
+                    <th>Esim剩餘用量</th>
+                </tr>
+        """
+
+    return html
 
 @app.route("/test_line_items")
 def test_line_items():
