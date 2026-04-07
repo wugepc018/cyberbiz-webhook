@@ -1374,7 +1374,7 @@ def Query_Status():
         
         trans_id_status = uuid.uuid4().hex     
         RSP_Query_API=f"{Base_URL}/openapi/esim/status/query"
-        RSP_Usage_API=f"{Base_URL}/openapi/esim/usage/realtime"
+        RSP_Usage_API=f"{Base_URL}/openapi/esim/usage/query"
         timestamp = str(int(time.time() * 1000))  
         raw = APP_ID + trans_id_status + timestamp + APP_SECRET
         ciphertext = hashlib.md5(raw.encode()).hexdigest()
@@ -1418,7 +1418,7 @@ def Query_Status():
             response_2=requests.post(RSP_Usage_API,json=payload,headers=headers_query,timeout=10)
             j2 = response_2.json()
             if j2.get("code") == "000":
-                usage_result = j2.get("data", {}).get("quotaList", [])
+                usage_result = j2.get("data", {})
                 logging.info(f"請求成功 {response_2.text}")
             
             else:
@@ -1440,7 +1440,6 @@ def Query_Status():
             return f"{b} B"
         except Exception as e:
             return str(b) if b is not None else "N/A"
-    usage_html = ""
     
     def fmt_time(ts):
         try:
@@ -1451,29 +1450,30 @@ def Query_Status():
             return datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
         except:
             return str(ts) if ts else "-"
+        
+    usage_html = ""
     if usage_result:
-        for q in usage_result:
-            init_q = fmt_bytes(q.get("initQuota", 0))
-            used_q = fmt_bytes(q.get("usedQuota", 0))
-            remain_q = fmt_bytes(q.get("remainingQuota", 0))
+    
+        total = fmt_bytes(usage_result.get("totalUsage", 0))
+        eff = fmt_time(usage_result.get("effTime", 0))
+        expTime = fmt_time(usage_result.get("expTime", 0))
 
-            try:
-                pct = round(int(q.get("usedQuota", 0)) / int(q.get("initQuota", 1)) * 100, 1)
-            except:
-                pct = 0
-                
+        usage_html = f"""
+        
+        <tr><td colspan='4'>總用量：{total}　生效：{eff}　到期：{expTime}</td></tr>"""
+        
+        for d in usage_result.get("dataUsageList", []):
+            date = d.get("usageDate", "-")
+            mcc = d.get("mcc", "-")
+            mnc = d.get("mnc", "-")
+            usage = fmt_bytes(d.get("usage", 0))
             usage_html += f"""
             <tr>
-                <td>{init_q}</td>
-                <td>{used_q}</td>
-                <td>{remain_q}</td>
-                <td>
-                    <div style="background:#eee;border-radius:4px;height:14px;width:120px;overflow:hidden;">
-                        <div style="background:#1a9e5c;width:{pct}%;height:100%;"></div>
-                    </div>
-                    {pct}%
-                </td>
+                <td>{date}</td>
+                <td>{mcc} / {mnc}</td>
+                <td colspan='2'>{usage}</td>
             </tr>"""
+            
     elif CID_query and not error_msg:
         usage_html = "<tr><td colspan='4'>查無流量資料</td></tr>"
         
@@ -1518,7 +1518,7 @@ def Query_Status():
         </form>
         {"<p style='color:red;'>⚠️ " + error_msg + "</p>" if error_msg else ""}
         {status_html}
-        {"<h3 style='margin-bottom:12px;'>即時流量</h3><table><tr><th>總量</th><th>已用</th><th>剩餘</th><th>使用進度</th></tr>" + usage_html + "</table>" if CID_query else ""}
+        {"<h3>用量明細</h3><table><tr><th>日期</th><th>MCC/MNC</th><th colspan='2'>用量</th></tr>" + usage_html + "</table>" if CID_query else ""}
     </body>
     </html>
     """
