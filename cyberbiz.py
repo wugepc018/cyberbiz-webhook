@@ -1415,11 +1415,11 @@ def Query_Status():
         "Ciphertext": ciphertext2
         }
         try:
-            response=requests.post(RSP_Usage_API,json=payload,headers=headers_query,timeout=10)
-            j2 = response.json()
+            response_2=requests.post(RSP_Usage_API,json=payload,headers=headers_query,timeout=10)
+            j2 = response_2.json()
             if j2.get("code") == "000":
                 usage_result = j2.get("data", {}).get("quotaList", [])
-                logging.info(f"請求成功 {response.text}")
+                logging.info(f"請求成功 {response_2.text}")
         except Exception as e:
             logging.error(f"流量查詢異常：{e}")
                 
