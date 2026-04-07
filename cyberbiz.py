@@ -1371,68 +1371,60 @@ def Query_Status():
     error_msg = None 
     
     if CID_query:
-        with sqlite3.connect("orders.db", timeout=30) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT Trans_id FROM CID_TABLE WHERE CID=?", (CID_query,))
-            row = cursor.fetchone()
-            
-        if not row:
-            error_msg = "找不到此 CID 對應的訂單"
-        else:
-            trans_id = row[0]
-                    
-            RSP_Query_API=f"{Base_URL}/openapi/esim/status/query"
-            timestamp = str(int(time.time() * 1000))  
-            raw = APP_ID + trans_id + timestamp + APP_SECRET
-            ciphertext = hashlib.md5(raw.encode()).hexdigest()
-            
-            headers = {
-            "Content-Type": "application/json",
-            "AppId": APP_ID,
-            "TransId": trans_id,
-            "Timestamp": timestamp,
-            "Ciphertext": ciphertext
-            }
-            payload={
-                "cid": CID_query,
-            }
-            try:
-                response=requests.post(RSP_Query_API,json=payload,headers=headers,timeout=10)
-            
-                if response.json().get("code")=="000":
-                    
-                    logging.info("請求成功")
-                    status_result = response.json().get("data", {})
-                else:
-                    error_msg = f"狀態查詢失敗：{ response.json().get('mesg')}"
-                    
-            except Exception as e:
-                error_msg = f"狀態查詢異常：{e}"
-            
-            trans_id_usage = uuid.uuid4().hex 
-            timestamp2 = str(int(time.time() * 1000))
-            raw2 = APP_ID + trans_id_usage + timestamp2 + APP_SECRET
-            ciphertext2 = hashlib.md5(raw2.encode()).hexdigest()
+        
+        trans_id_status = uuid.uuid4().hex     
+        RSP_Query_API=f"{Base_URL}/openapi/esim/status/query"
+        timestamp = str(int(time.time() * 1000))  
+        raw = APP_ID + trans_id_status + timestamp + APP_SECRET
+        ciphertext = hashlib.md5(raw.encode()).hexdigest()
+        
+        headers = {
+        "Content-Type": "application/json",
+        "AppId": APP_ID,
+        "TransId": trans_id_status,
+        "Timestamp": timestamp,
+        "Ciphertext": ciphertext
+        }
+        payload={
+            "cid": CID_query,
+        }
+        try:
+            response=requests.post(RSP_Query_API,json=payload,headers=headers,timeout=10)
+        
+            if response.json().get("code")=="000":
+                
+                logging.info("請求成功")
+                status_result = response.json().get("data", {})
+            else:
+                error_msg = f"狀態查詢失敗：{ response.json().get('mesg')}"
+                
+        except Exception as e:
+            error_msg = f"狀態查詢異常：{e}"
+        
+        trans_id_usage = uuid.uuid4().hex 
+        timestamp2 = str(int(time.time() * 1000))
+        raw2 = APP_ID + trans_id_usage + timestamp2 + APP_SECRET
+        ciphertext2 = hashlib.md5(raw2.encode()).hexdigest()
 
-            headers_query = {
-            "Content-Type": "application/json",
-            "AppId": APP_ID,
-            "TransId": trans_id,
-            "Timestamp": timestamp2,
-            "Ciphertext": ciphertext2
-            }
-            try:
-                r2 = requests.post(
-                    f"{Base_URL}/openapi/esim/usage/realtime",
-                    json={"cid": CID_query},
-                    headers=headers_query,
-                    timeout=10
-                )
-                j2 = r2.json()
-                if j2.get("code") == "000":
-                    usage_result = j2.get("data", {}).get("quotaList", [])
-            except Exception as e:
-                logging.error(f"流量查詢異常：{e}")
+        headers_query = {
+        "Content-Type": "application/json",
+        "AppId": APP_ID,
+        "TransId": trans_id_usage,
+        "Timestamp": timestamp2,
+        "Ciphertext": ciphertext2
+        }
+        try:
+            r2 = requests.post(
+                f"{Base_URL}/openapi/esim/usage/realtime",
+                json={"cid": CID_query},
+                headers=headers_query,
+                timeout=10
+            )
+            j2 = r2.json()
+            if j2.get("code") == "000":
+                usage_result = j2.get("data", {}).get("quotaList", [])
+        except Exception as e:
+            logging.error(f"流量查詢異常：{e}")
                 
     status_label = {"0": "未知", "1": "已激活", "2": "已失效"}
             
