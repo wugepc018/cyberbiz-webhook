@@ -1374,7 +1374,7 @@ def Query_Status():
         
         trans_id_status = uuid.uuid4().hex     
         RSP_Query_API=f"{Base_URL}/openapi/esim/status/query"
-        RSP_Query_API=f"{Base_URL}/openapi/esim/usage/realtime"
+        RSP_Usage_API=f"{Base_URL}/openapi/esim/usage/realtime"
         timestamp = str(int(time.time() * 1000))  
         raw = APP_ID + trans_id_status + timestamp + APP_SECRET
         ciphertext = hashlib.md5(raw.encode()).hexdigest()
@@ -1415,7 +1415,7 @@ def Query_Status():
         "Ciphertext": ciphertext2
         }
         try:
-            response=requests.post(RSP_Query_API,json=payload,headers=headers_query,timeout=10)
+            response=requests.post(RSP_Usage_API,json=payload,headers=headers_query,timeout=10)
             j2 = response.json()
             if j2.get("code") == "000":
                 usage_result = j2.get("data", {}).get("quotaList", [])
