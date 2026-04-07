@@ -1420,6 +1420,9 @@ def Query_Status():
             if j2.get("code") == "000":
                 usage_result = j2.get("data", {}).get("quotaList", [])
                 logging.info(f"請求成功 {response_2.text}")
+            
+            else:
+                logging.warning(f"usage 請求失敗: code={j2.get('code')}, mesg={j2.get('mesg')}")
         except Exception as e:
             logging.error(f"流量查詢異常：{e}")
                 
