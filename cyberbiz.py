@@ -1374,6 +1374,7 @@ def Query_Status():
         
         trans_id_status = uuid.uuid4().hex     
         RSP_Query_API=f"{Base_URL}/openapi/esim/status/query"
+        RSP_Query_API=f"{Base_URL}/openapi/esim/usage/realtime"
         timestamp = str(int(time.time() * 1000))  
         raw = APP_ID + trans_id_status + timestamp + APP_SECRET
         ciphertext = hashlib.md5(raw.encode()).hexdigest()
