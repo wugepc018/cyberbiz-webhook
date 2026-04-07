@@ -1516,7 +1516,7 @@ def Query_Status():
         </form>
         {"<p style='color:red;'>⚠️ " + error_msg + "</p>" if error_msg else ""}
         {status_html}
-        {"<h3>用量明細</h3><table><tr><th>日期</th><th colspan='2'>用量</th></tr>" if CID_query else ""}
+        {"<h3>用量明細</h3><table><tr><th>日期</th><th colspan='2'>用量</th></tr>" + usage_html + "</table>" if CID_query else ""}
     </body>
     </html>
     """
