@@ -1409,8 +1409,9 @@ def Query_Status():
             except Exception as e:
                 error_msg = f"狀態查詢異常：{e}"
             
+            trans_id_usage = uuid.uuid4().hex 
             timestamp2 = str(int(time.time() * 1000))
-            raw2 = APP_ID + trans_id + timestamp2 + APP_SECRET
+            raw2 = APP_ID + trans_id_usage + timestamp2 + APP_SECRET
             ciphertext2 = hashlib.md5(raw2.encode()).hexdigest()
 
             headers_query = {
