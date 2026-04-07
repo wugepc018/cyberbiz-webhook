@@ -1414,16 +1414,11 @@ def Query_Status():
         "Ciphertext": ciphertext2
         }
         try:
-            r2 = requests.post(
-                f"{Base_URL}/openapi/esim/usage/realtime",
-                json={"cid": CID_query},
-                headers=headers_query,
-                timeout=10
-            )
-            j2 = r2.json()
+            response=requests.post(RSP_Query_API,json=payload,headers=headers_query,timeout=10)
+            j2 = response.json()
             if j2.get("code") == "000":
                 usage_result = j2.get("data", {}).get("quotaList", [])
-                logging.info(f"請求成功 {r2.text}")
+                logging.info(f"請求成功 {response.text}")
         except Exception as e:
             logging.error(f"流量查詢異常：{e}")
                 
