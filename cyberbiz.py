@@ -1442,6 +1442,15 @@ def Query_Status():
             return str(b) if b is not None else "N/A"
     usage_html = ""
     
+    def fmt_time(ts):
+        try:
+            ts = int(ts)
+            # 如果是毫秒級（13位數）就除以1000
+            if ts > 1e10:
+                ts = ts / 1000
+            return datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+        except:
+            return str(ts) if ts else "-"
     if usage_result:
         for q in usage_result:
             init_q = fmt_bytes(q.get("initQuota", 0))
@@ -1479,7 +1488,7 @@ def Query_Status():
                 <th style="padding:10px 14px; background:#f0f2f5; border:1px solid #e2e5ea; text-align:left;">狀態更新時間</th></tr>
             <tr><td style="padding:10px 14px; border:1px solid #e2e5ea;">{status_label.get(s, s)}</td>
                 <td style="padding:10px 14px; border:1px solid #e2e5ea;">{status_result.get("state", "-")}</td>
-                <td style="padding:10px 14px; border:1px solid #e2e5ea;">{status_result.get("statusTime", "-")}</td></tr>
+                <td style="padding:10px 14px; border:1px solid #e2e5ea;">{fmt_time(status_result.get("statusTime", "-"))}</td></tr>
         </table>"""
 
     html = f"""
