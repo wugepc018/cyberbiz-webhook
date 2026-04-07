@@ -1365,40 +1365,161 @@ def orders():
     return html
 @app.route("/Query_Status")
 def Query_Status():
-    CID_query = request.args.get("order_id")  
+    CID_query = request.args.get("cid", "").strip()
+    status_result = None
+    usage_result = None
+    error_msg = None 
     
-    html = f"""
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <title>Esim 狀態與用量查詢</title>
-            <link rel="icon" type="image/png" href="/favicon.png">
+    if CID_query:
+        with sqlite3.connect("orders.db", timeout=30) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT Trans_id FROM CID_TABLE WHERE CID=?", (CID_query,))
+            row = cursor.fetchone()
             
-        </head>
-        
-        <body>
-            <h2>訂單報表</h2>
+        if not row:
+            error_msg = "找不到此 CID 對應的訂單"
+        else:
+            trans_id = row[0]
+                    
+            RSP_Query_API=f"{Base_URL}/openapi/esim/status/query"
+            timestamp = str(int(time.time() * 1000))  
+            raw = APP_ID + trans_id + timestamp + APP_SECRET
+            ciphertext = hashlib.md5(raw.encode()).hexdigest()
+            
+            headers = {
+            "Content-Type": "application/json",
+            "AppId": APP_ID,
+            "TransId": trans_id,
+            "Timestamp": timestamp,
+            "Ciphertext": ciphertext
+            }
+            payload={
+                "cid": CID_query,
+            }
+            try:
+                response=requests.post(RSP_Query_API,json=payload,headers=headers,timeout=10)
+            
+                if response.json().get("code")=="000":
+                    
+                    logging.info("請求成功")
+                    status_result = response.json().get("data", {})
+                else:
+                    error_msg = f"狀態查詢失敗：{ response.json().get('mesg')}"
+                    
+            except Exception as e:
+                error_msg = f"狀態查詢異常：{e}"
+            
+            timestamp2 = str(int(time.time() * 1000))
+            raw2 = APP_ID + trans_id + timestamp2 + APP_SECRET
+            ciphertext2 = hashlib.md5(raw2.encode()).hexdigest()
 
-            <form method="get" action="/Query_Status" style="margin-bottom:20px; display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
-            
-                <input type="text" name="order_id" placeholder="輸入CID" 
-                    value="{CID_query if CID_query else ''}"
-                    style="padding:5px; width:200px; font-family: 'Segoe UI', Arial, sans-serif;">
-                    
-                    
-                <button type="submit">搜尋</button>
-                <a href="/orders" style="padding:5px 12px; text-decoration:none; border:1.5px solid #555e7a; border-radius:6px; color:#555e7a; font-size:14px;">清除</a>
+            headers_query = {
+            "Content-Type": "application/json",
+            "AppId": APP_ID,
+            "TransId": trans_id,
+            "Timestamp": timestamp2,
+            "Ciphertext": ciphertext2
+            }
+            try:
+                r2 = requests.post(
+                    f"{Base_URL}/openapi/esim/usage/realtime",
+                    json={"cid": CID_query},
+                    headers=headers_query,
+                    timeout=10
+                )
+                j2 = r2.json()
+                if j2.get("code") == "000":
+                    usage_result = j2.get("data", {}).get("quotaList", [])
+            except Exception as e:
+                logging.error(f"流量查詢異常：{e}")
                 
-            </form>
+    status_label = {"0": "未知", "1": "已激活", "2": "已失效"}
             
-            <table>
-                <tr>
-                    <th>Esim使用狀態</th>
-                    <th>Esim 目前用量</th>
-                    <th>Esim剩餘用量</th>
-                </tr>
-        """
+    def fmt_bytes(b):
+        try:
+            b = int(b)
+            if b >= 1073741824:
+                return f"{b/1073741824:.2f} GB"
+            elif b >= 1048576:
+                return f"{b/1048576:.2f} MB"
+            elif b >= 1024:
+                return f"{b/1024:.2f} KB"
+            return f"{b} B"
+        except Exception as e:
+            return str(b) if b is not None else "N/A"
+    usage_html = ""
+    
+    if usage_result:
+        for q in usage_result:
+            init_q = fmt_bytes(q.get("initQuota", 0))
+            used_q = fmt_bytes(q.get("usedQuota", 0))
+            remain_q = fmt_bytes(q.get("remainingQuota", 0))
 
+            try:
+                pct = round(int(q.get("usedQuota", 0)) / int(q.get("initQuota", 1)) * 100, 1)
+            except:
+                pct = 0
+                
+            usage_html += f"""
+            <tr>
+                <td>{init_q}</td>
+                <td>{used_q}</td>
+                <td>{remain_q}</td>
+                <td>
+                    <div style="background:#eee;border-radius:4px;height:14px;width:120px;overflow:hidden;">
+                        <div style="background:#1a9e5c;width:{pct}%;height:100%;"></div>
+                    </div>
+                    {pct}%
+                </td>
+            </tr>"""
+    elif CID_query and not error_msg:
+        usage_html = "<tr><td colspan='4'>查無流量資料</td></tr>"
+        
+    status_html = ""
+        
+    if status_result:
+        s = status_result.get("status", "-")
+        status_html = f"""
+        <table style="border-collapse:collapse; width:100%; background:#fff; border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,0.07); margin-bottom:24px;">
+            <tr><th style="padding:10px 14px; background:#f0f2f5; border:1px solid #e2e5ea; text-align:left;">eSIM 狀態</th>
+                <th style="padding:10px 14px; background:#f0f2f5; border:1px solid #e2e5ea; text-align:left;">Profile State</th>
+                <th style="padding:10px 14px; background:#f0f2f5; border:1px solid #e2e5ea; text-align:left;">狀態更新時間</th></tr>
+            <tr><td style="padding:10px 14px; border:1px solid #e2e5ea;">{status_label.get(s, s)}</td>
+                <td style="padding:10px 14px; border:1px solid #e2e5ea;">{status_result.get("state", "-")}</td>
+                <td style="padding:10px 14px; border:1px solid #e2e5ea;">{status_result.get("statusTime", "-")}</td></tr>
+        </table>"""
+
+    html = f"""
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>eSIM 狀態與用量查詢</title>
+        <link rel="icon" type="image/png" href="/favicon.png">
+        <style>
+            body {{ font-family: 'Segoe UI', Arial, sans-serif; padding: 28px 36px; background: #f7f8fa; color: #333; }}
+            h2 {{ font-size: 20px; font-weight: 600; margin-bottom: 20px; color: #1a1a2e; }}
+            input {{ border: 1px solid #ccc; border-radius: 4px; padding: 5px 8px; }}
+            input:focus {{ outline: none; border-color: #555e7a; box-shadow: 0 0 0 3px rgba(85,94,122,0.1); }}
+            button {{ padding: 5px 14px; border-radius: 6px; border: 1.5px solid #555e7a; background: #fff; color: #555e7a; cursor: pointer; font-size: 14px; }}
+            button:hover {{ background: #555e7a; color: #fff; }}
+            table {{ border-collapse: collapse; width: 100%; background: #fff; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); margin-bottom: 24px; }}
+            th {{ padding: 10px 14px; background: #f0f2f5; border: 1px solid #e2e5ea; font-size: 12px; text-align: left; }}
+            td {{ padding: 10px 14px; border: 1px solid #e2e5ea; font-size: 13px; }}
+        </style>
+    </head>
+    <body>
+        <h2>eSIM 狀態與用量查詢</h2>
+        <form method="get" action="/Query_Status" style="display:flex; gap:8px; margin-bottom:24px; align-items:center;">
+            <input type="text" name="cid" placeholder="輸入 CID" value="{CID_query}" style="width:260px;">
+            <button type="submit">查詢</button>
+            <a href="/Query_Status" style="padding:5px 12px; border:1.5px solid #555e7a; border-radius:6px; color:#555e7a; text-decoration:none; font-size:14px;">清除</a>
+        </form>
+        {"<p style='color:red;'>⚠️ " + error_msg + "</p>" if error_msg else ""}
+        {status_html}
+        {"<h3 style='margin-bottom:12px;'>即時流量</h3><table><tr><th>總量</th><th>已用</th><th>剩餘</th><th>使用進度</th></tr>" + usage_html + "</table>" if CID_query else ""}
+    </body>
+    </html>
+    """
     return html
 
 @app.route("/test_line_items")
