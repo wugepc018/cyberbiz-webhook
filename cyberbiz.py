@@ -1460,7 +1460,9 @@ def Query_Status():
 
         usage_html = f"""
         
-        <tr><td colspan='4'>總用量：{total}　生效：{eff}　到期：{expTime}    *注意：每日用量更新時間為 台灣凌晨12點。 國外與台灣有時差請特別注意</td></tr>"""
+        <tr><td colspan='4'>總用量：{total}　生效：{eff}　到期：{expTime}</td>
+        <td style="text-align:right; color:#888; font-size:12px;">*注意：每日用量更新時間為 台灣凌晨12點。 國外與台灣有時差請特別注意</td></tr>"""
+        
         
         for d in usage_result.get("dataUsageList", []):
             date = d.get("usageDate", "-")
