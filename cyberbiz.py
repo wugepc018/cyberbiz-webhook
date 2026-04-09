@@ -1450,7 +1450,20 @@ def Query_Status():
             return datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
         except:
             return str(ts) if ts else "-"
-        
+    Title=None
+    with sqlite3.connect("orders.db", timeout=30) as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("""
+        SELECT o.Title
+        FROM orders o
+        LEFT JOIN CID_TABLE c ON o.Trans_id = c.Trans_id
+        WHERE c.CID = ?
+        LIMIT 1
+        """, (CID_query,))
+        row = cursor.fetchone()
+        if row:
+            Title = row[0]
     usage_html = ""
     if usage_result:
     
@@ -1481,12 +1494,18 @@ def Query_Status():
         s = status_result.get("status", "-")
         status_html = f"""
         <table style="border-collapse:collapse; width:100%; background:#fff; border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,0.07); margin-bottom:24px;">
-            <tr><th style="padding:10px 14px; background:#f0f2f5; border:1px solid #e2e5ea; text-align:left;">eSIM 狀態</th>
+            <tr>
+                <th style="padding:10px 14px; background:#f0f2f5; border:1px solid #e2e5ea; text-align:left;">eSIM 狀態</th>
                 <th style="padding:10px 14px; background:#f0f2f5; border:1px solid #e2e5ea; text-align:left;">Profile State</th>
-                <th style="padding:10px 14px; background:#f0f2f5; border:1px solid #e2e5ea; text-align:left;">狀態更新時間</th></tr>
-            <tr><td style="padding:10px 14px; border:1px solid #e2e5ea;">{status_label.get(s, s)}</td>
+                <th style="padding:10px 14px; background:#f0f2f5; border:1px solid #e2e5ea; text-align:left;">狀態更新時間</th>
+                <th style="padding:10px 14px; background:#f0f2f5; border:1px solid #e2e5ea; text-align:left;">方案名稱</th>
+            </tr>
+            <tr>
+                <td style="padding:10px 14px; border:1px solid #e2e5ea;">{status_label.get(s, s)}</td>
                 <td style="padding:10px 14px; border:1px solid #e2e5ea;">{status_result.get("state", "-")}</td>
-                <td style="padding:10px 14px; border:1px solid #e2e5ea;">{fmt_time(status_result.get("statusTime", "-"))}</td></tr>
+                <td style="padding:10px 14px; border:1px solid #e2e5ea;">{fmt_time(status_result.get("statusTime", "-"))}</td>
+                <td style="padding:10px 14px; border:1px solid #e2e5ea;">{Title or "-"}</td>
+            </tr>
         </table>"""
 
     html = f"""
