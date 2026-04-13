@@ -1371,60 +1371,137 @@ def Query_Status():
     error_msg = None 
     
     if CID_query:
-        
-        trans_id_status = uuid.uuid4().hex     
-        RSP_Query_API=f"{Base_URL}/openapi/esim/status/query"
-        RSP_Usage_API=f"{Base_URL}/openapi/esim/usage/query"
-        timestamp = str(int(time.time() * 1000))  
-        raw = APP_ID + trans_id_status + timestamp + APP_SECRET
-        ciphertext = hashlib.md5(raw.encode()).hexdigest()
-        
-        headers = {
-        "Content-Type": "application/json",
-        "AppId": APP_ID,
-        "TransId": trans_id_status,
-        "Timestamp": timestamp,
-        "Ciphertext": ciphertext
-        }
-        payload={
-            "cid": CID_query,
-        }
-        try:
-            response=requests.post(RSP_Query_API,json=payload,headers=headers,timeout=10)
-        
-            if response.json().get("code")=="000":
-                
-                logging.info(f"請求成功 {response.text}")
-                status_result = response.json().get("data", {})
-            else:
-                error_msg = f"狀態查詢失敗：{ response.json().get('mesg')}"
-                
-        except Exception as e:
-            error_msg = f"狀態查詢異常：{e}"
-        
-        trans_id_usage = uuid.uuid4().hex 
-        timestamp2 = str(int(time.time() * 1000))
-        raw2 = APP_ID + trans_id_usage + timestamp2 + APP_SECRET
-        ciphertext2 = hashlib.md5(raw2.encode()).hexdigest()
+        with sqlite3.connect("orders.db", timeout=30) as conn:
+            cursor = conn.cursor()
 
-        headers_query = {
-        "Content-Type": "application/json",
-        "AppId": APP_ID,
-        "TransId": trans_id_usage,
-        "Timestamp": timestamp2,
-        "Ciphertext": ciphertext2
-        }
-        try:
-            response_2=requests.post(RSP_Usage_API,json=payload,headers=headers_query,timeout=10)
-            j2 = response_2.json()
-            if j2.get("code") == "000":
-                usage_result = j2.get("data", {})
-                logging.info(f"請求成功 {response_2.text}")
+            cursor.execute("""
+            SELECT o.qc
+            FROM orders o
+            LEFT JOIN CID_TABLE c ON o.Trans_id = c.Trans_id
+            WHERE c.CID = ?
+            LIMIT 1
+            """, (CID_query,))
+            qc = None
+            row = cursor.fetchone()
+            if row:
+                qc=row[0]
+                
+        if qc=='Auto001':
+            trans_id_status = uuid.uuid4().hex     
+            RSP_Query_API=f"{Base_URL}/openapi/esim/status/query"
+            RSP_Usage_API=f"{Base_URL}/openapi/esim/usage/query"
+            timestamp = str(int(time.time() * 1000))  
+            raw = APP_ID + trans_id_status + timestamp + APP_SECRET
+            ciphertext = hashlib.md5(raw.encode()).hexdigest()
             
-            else:
-                logging.warning(f"usage 請求失敗: code={j2.get('code')}, mesg={j2.get('mesg')}")
-        except Exception as e:
-            logging.error(f"流量查詢異常：{e}")
+            headers = {
+            "Content-Type": "application/json",
+            "AppId": APP_ID,
+            "TransId": trans_id_status,
+            "Timestamp": timestamp,
+            "Ciphertext": ciphertext
+            }
+            payload={
+                "cid": CID_query,
+            }
+            try:
+                response=requests.post(RSP_Query_API,json=payload,headers=headers,timeout=10)
+            
+                if response.json().get("code")=="000":
+                    
+                    logging.info(f"請求成功 {response.text}")
+                    status_result = response.json().get("data", {})
+                else:
+                    error_msg = f"狀態查詢失敗：{ response.json().get('mesg')}"
+                    
+            except Exception as e:
+                error_msg = f"狀態查詢異常：{e}"
+            
+            trans_id_usage = uuid.uuid4().hex 
+            timestamp2 = str(int(time.time() * 1000))
+            raw2 = APP_ID + trans_id_usage + timestamp2 + APP_SECRET
+            ciphertext2 = hashlib.md5(raw2.encode()).hexdigest()
+
+            headers_query = {
+            "Content-Type": "application/json",
+            "AppId": APP_ID,
+            "TransId": trans_id_usage,
+            "Timestamp": timestamp2,
+            "Ciphertext": ciphertext2
+            }
+            try:
+                response_2=requests.post(RSP_Usage_API,json=payload,headers=headers_query,timeout=10)
+                j2 = response_2.json()
+                if j2.get("code") == "000":
+                    usage_result = j2.get("data", {})
+                    logging.info(f"請求成功 {response_2.text}")
+                
+                else:
+                    logging.warning(f"usage 請求失敗: code={j2.get('code')}, mesg={j2.get('mesg')}")
+            except Exception as e:
+                logging.error(f"流量查詢異常：{e}")
+        else:
+            
+            FTC_Usage_API="https://zdfjzyhdcl.execute-api.ap-northeast-1.amazonaws.com/prod/v1/checkBalance"
+            FTC_Query_API="https://zdfjzyhdcl.execute-api.ap-northeast-1.amazonaws.com/prod/v1/getStatus"
+            with sqlite3.connect("orders.db", timeout=30) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                SELECT Trans_id
+                FROM CID_TABLE
+                WHERE CID = ?
+                LIMIT 1
+                """, (CID_query,))
+                row = cursor.fetchone()
+                if row:
+                    trans_id = row[0]    
+            headers = {
+            "Content-Type": "application/json",
+            "x-api-key": FTC_API_KEY 
+            }
+            payload={
+                "orderId": trans_id,
+                "cid": CID_query
+            }
+            try:
+                response=requests.post(FTC_Query_API,json=payload,headers=headers,timeout=10)
+                if response.json().get("code")=="200":
+                    data = response.json().get("data")
+                    status_list = data[0].get("statusList", [])
+                    if status_list:
+                        item=status_list[-1]
+                        status_result={
+                            "status": str(item.get("cancel_status", "-")),
+                            "state": "-",
+                            "statusTime": item.get("install_time", 0),
+                            "install_time": item.get("install_time"),
+                            "delete_time": item.get("delete_time"),
+                        }
+            except Exception as e:
+                logging.error(f"狀態查詢異常：{e}")
+                
+            headers_balance = {
+            "Content-Type": "application/json",
+            "x-api-key": FTC_API_KEY 
+            }
+            payload_balance={
+                "productType": 1,
+                "cid": CID_query
+            }
+            try:
+                response=requests.post(FTC_Usage_API,json=payload_balance,headers=headers_balance,timeout=10)
+                if response.json().get("code")=="200":
+                    usage_list = response.json().get("data")[0].get("dataUsageList", [])
+                    usage_result = {
+                        "totalUsage": sum(int(i.get("usage", 0)) for i in usage_list),
+                        "effTime": 0,
+                        "expTime": 0,
+                        "dataUsageList": usage_list  
+                    }
+                        
+            
+            except Exception as e:
+                logging.error(f"狀態查詢異常：{e}")
                 
     status_label = {"0": "未知", "1": "已激活", "2": "已失效"}
             
