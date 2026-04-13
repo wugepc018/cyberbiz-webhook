@@ -1466,6 +1466,7 @@ def Query_Status():
             try:
                 response=requests.post(FTC_Query_API,json=payload,headers=headers,timeout=10)
                 if response.json().get("code")=="200":
+                    logging.info(f"請求成功 {response.text}")
                     data = response.json().get("data")
                     status_list = data[0].get("statusList", [])
                     if status_list:
@@ -1477,6 +1478,8 @@ def Query_Status():
                             "install_time": item.get("install_time"),
                             "delete_time": item.get("delete_time"),
                         }
+                else:
+                    logging.warning(f"usage 請求失敗: code={response.json().get('code')}, mesg={response.json().get('mesg')}")
             except Exception as e:
                 logging.error(f"狀態查詢異常：{e}")
                 
@@ -1489,17 +1492,19 @@ def Query_Status():
                 "cid": CID_query
             }
             try:
-                response=requests.post(FTC_Usage_API,json=payload_balance,headers=headers_balance,timeout=10)
-                if response.json().get("code")=="200":
-                    usage_list = response.json().get("data")[0].get("dataUsageList", [])
+                response_2=requests.post(FTC_Usage_API,json=payload_balance,headers=headers_balance,timeout=10)
+                if response_2.json().get("code")=="200":
+                    logging.info(f"請求成功 {response_2.text}")
+                    usage_list = response_2.json().get("data")[0].get("dataUsageList", [])
                     usage_result = {
                         "totalUsage": sum(int(i.get("usage", 0)) for i in usage_list),
                         "effTime": 0,
                         "expTime": 0,
                         "dataUsageList": usage_list  
                     }
+                else:
+                    logging.warning(f"usage 請求失敗: code={response_2.json().get('code')}, mesg={response_2.json().get('mesg')}")
                         
-            
             except Exception as e:
                 logging.error(f"狀態查詢異常：{e}")
                 
