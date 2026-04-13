@@ -1488,7 +1488,7 @@ def Query_Status():
             "x-api-key": FTC_API_KEY 
             }
             payload_balance={
-                "productType": 1,
+                
                 "cid": CID_query
             }
             try:
