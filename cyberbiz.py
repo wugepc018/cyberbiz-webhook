@@ -1392,7 +1392,7 @@ def Query_Status():
             if row:
                 qc=row[0]
                 
-        if qc=='AUTO001':
+        if qc is None or qc == 'AUTO001':
             trans_id_status = uuid.uuid4().hex     
             RSP_Query_API=f"{Base_URL}/openapi/esim/status/query"
             RSP_Usage_API=f"{Base_URL}/openapi/esim/usage/query"
