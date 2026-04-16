@@ -1375,6 +1375,7 @@ def Query_Status():
         error_msg = "CID 格式不正確，請重新輸入。"
         CID_query = "" 
         
+    
     if CID_query:
         with sqlite3.connect("orders.db", timeout=30) as conn:
             cursor = conn.cursor()
@@ -1446,9 +1447,9 @@ def Query_Status():
             except Exception as e:
                 logging.error(f"流量查詢異常：{e}")
         else:
-            
             FTC_Usage_API="https://zdfjzyhdcl.execute-api.ap-northeast-1.amazonaws.com/prod/v1/checkBalance"
             FTC_Query_API="https://zdfjzyhdcl.execute-api.ap-northeast-1.amazonaws.com/prod/v1/getStatus"
+            trans_id = None
             with sqlite3.connect("orders.db", timeout=30) as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
@@ -1460,58 +1461,61 @@ def Query_Status():
                 row = cursor.fetchone()
                 if row:
                     trans_id = row[0]    
-            headers = {
-            "Content-Type": "application/json",
-            "x-api-key": FTC_API_KEY 
-            }
-            payload={
-                "orderId": trans_id,
-                "cid": CID_query
-            }
-            try:
-                response=requests.post(FTC_Query_API,json=payload,headers=headers,timeout=10)
-                if response.json().get("code")=="200":
-                    logging.info(f"請求成功 {response.text}")
-                    data = response.json().get("data")
-                    status_list = data[0].get("statusList", [])
-                    if status_list:
-                        item=status_list[-1]
-                        status_result={
-                            "status": str(item.get("cancel_status", "-")),
-                            "state": "-",
-                            "statusTime": item.get("install_time", 0),
-                            "install_time": item.get("install_time"),
-                            "delete_time": item.get("delete_time"),
+            if not trans_id:
+                error_msg = "查無此 CID 對應的訂單資料"
+            else:
+                headers = {
+                "Content-Type": "application/json",
+                "x-api-key": FTC_API_KEY 
+                }
+                payload={
+                    "orderId": trans_id,
+                    "cid": CID_query
+                }
+                try:
+                    response=requests.post(FTC_Query_API,json=payload,headers=headers,timeout=10)
+                    if response.json().get("code")=="200":
+                        logging.info(f"請求成功 {response.text}")
+                        data = response.json().get("data")
+                        status_list = data[0].get("statusList", [])
+                        if status_list:
+                            item=status_list[-1]
+                            status_result={
+                                "status": str(item.get("cancel_status", "-")),
+                                "state": "-",
+                                "statusTime": item.get("install_time", 0),
+                                "install_time": item.get("install_time"),
+                                "delete_time": item.get("delete_time"),
+                            }
+                    else:
+                        logging.warning(f"usage 請求失敗: code={response.json().get('code')}, mesg={response.json().get('mesg')}")
+                except Exception as e:
+                    logging.error(f"狀態查詢異常：{e}")
+                    
+                headers_balance = {
+                "Content-Type": "application/json",
+                "x-api-key": FTC_API_KEY 
+                }
+                payload_balance={
+                    "productType": 2,
+                    "cid": CID_query
+                }
+                try:
+                    response_2=requests.post(FTC_Usage_API,json=payload_balance,headers=headers_balance,timeout=10)
+                    if response_2.json().get("code")=="200":
+                        logging.info(f"請求成功 {response_2.text}")
+                        usage_list = response_2.json().get("data")[0].get("dataUsageList", [])
+                        usage_result = {
+                            "totalUsage": sum(int(i.get("usage", 0)) for i in usage_list),
+                            "effTime": 0,
+                            "expTime": 0,
+                            "dataUsageList": usage_list  
                         }
-                else:
-                    logging.warning(f"usage 請求失敗: code={response.json().get('code')}, mesg={response.json().get('mesg')}")
-            except Exception as e:
-                logging.error(f"狀態查詢異常：{e}")
-                
-            headers_balance = {
-            "Content-Type": "application/json",
-            "x-api-key": FTC_API_KEY 
-            }
-            payload_balance={
-                "productType": 2,
-                "cid": CID_query
-            }
-            try:
-                response_2=requests.post(FTC_Usage_API,json=payload_balance,headers=headers_balance,timeout=10)
-                if response_2.json().get("code")=="200":
-                    logging.info(f"請求成功 {response_2.text}")
-                    usage_list = response_2.json().get("data")[0].get("dataUsageList", [])
-                    usage_result = {
-                        "totalUsage": sum(int(i.get("usage", 0)) for i in usage_list),
-                        "effTime": 0,
-                        "expTime": 0,
-                        "dataUsageList": usage_list  
-                    }
-                else:
-                    logging.warning(f"usage 請求失敗: code={response_2.json().get('code')}, mesg={response_2.json().get('mesg')}")
-                        
-            except Exception as e:
-                logging.error(f"狀態查詢異常：{e}")
+                    else:
+                        logging.warning(f"usage 請求失敗: code={response_2.json().get('code')}, mesg={response_2.json().get('mesg')}")
+                            
+                except Exception as e:
+                    logging.error(f"狀態查詢異常：{e}")
                 
     status_label = {"0": "未知", "1": "已激活", "2": "已失效"}
             
