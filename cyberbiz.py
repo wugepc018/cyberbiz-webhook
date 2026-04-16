@@ -26,6 +26,7 @@ import random
 from flask import send_file, request
 from openpyxl import Workbook
 from io import BytesIO
+import re
 
 #LOG_PATH = "/root/app/cyberbiz-webhook/logs/webhook.log"
 logging.basicConfig(
@@ -1370,6 +1371,10 @@ def Query_Status():
     usage_result = None
     error_msg = None 
     
+    if CID_query and not re.match(r'^[A-Za-z0-9_\-]{1,64}$', CID_query):
+        error_msg = "CID 格式不正確，請重新輸入。"
+        CID_query = "" 
+        
     if CID_query:
         with sqlite3.connect("orders.db", timeout=30) as conn:
             cursor = conn.cursor()
