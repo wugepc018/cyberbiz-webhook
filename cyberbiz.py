@@ -158,10 +158,10 @@ def cyberbiz_order():
             qc=item.get("qc")
             sku=item.get("sku")
              
-            title=item.get("title")
+            title=(item.get("title") or "").strip()
             product_id=item.get("product_id")
             line_items_id=item.get("id")
-            variant_title=item.get("variant_title")
+            variant_title=(item.get("variant_title") or "").strip()
             quantity=item.get("quantity")
             try:
                 price = item.get("price") or 0
@@ -450,7 +450,12 @@ def query_lpa(trans_id):
 def poll_lpa(trans_id, order_id_for_close_cyberbiz):
     qrcode_list=[]
     for i in range(144):
-        result = query_lpa(trans_id)
+        try:
+            result = query_lpa(trans_id)
+        except Exception as e:
+            logging.error(f"第{i+1}次查詢發生例外: {e}，sleep 600s")
+            time.sleep(600)
+            continue
 
         if not result:
             logging.info(f"第{i+1}次查詢 result=None，sleep 600s")
@@ -1050,7 +1055,7 @@ def close_cyberbiz_order(order_id:int):
 def orders():
     order_id_query = request.args.get("order_id")  
     status_query = request.args.get("status")  
-    title_query = request.args.get("title")  
+    title_query = request.args.get("title", "").strip()
     Vendor_query = request.args.get("vendor")  
     date_from = request.args.get("date_from")  
     date_to = request.args.get("date_to")  
