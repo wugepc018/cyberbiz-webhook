@@ -174,6 +174,7 @@ def cyberbiz_order():
             logging.info(f"產品代號: {sku}")
             logging.info(f"備註欄位: {note}")
             full_title = f"{title} {variant_title}" if variant_title else title
+            full_title = re.sub(r' +', ' ', full_title)
             for i in range(quantity):
                 trans_id = str(uuid.uuid4()).replace("-", "")[:20]
                 auto_count += 1 
