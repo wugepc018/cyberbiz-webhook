@@ -27,6 +27,7 @@ from flask import send_file, request
 from openpyxl import Workbook
 from io import BytesIO
 import re
+import random
 
 #LOG_PATH = "/root/app/cyberbiz-webhook/logs/webhook.log"
 logging.basicConfig(
@@ -125,7 +126,11 @@ def cyberbiz_order():
     logging.info(json.dumps(data, indent=2, ensure_ascii=False))
     
     email = data.get("customer", {}).get("email")
-    mobile_number = data.get("customer", {}).get("mobile")
+    mobile_number = data.get("customer", {}).get("mobile") or None
+    if not mobile_number:
+        suffix = random.randint(10000000, 99999999)  # 8位數
+        mobile_number = f"09{suffix}"
+        logging.info(f"客戶未填手機，使用假號碼: {mobile_number}")
     Customer_name = data.get("customer", {}).get("name")
     order_id = data.get("order_number")
     order_id_for_close_cyberbiz = data.get("id")
