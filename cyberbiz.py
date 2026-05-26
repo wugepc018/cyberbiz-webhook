@@ -543,10 +543,10 @@ def poll_lpa(trans_id, order_id_for_close_cyberbiz):
         logging.info(f"訂購esim完成 order_id={order_id} trans_id={trans_id}")
         check_and_close_order(order_id, order_id_for_close_cyberbiz)
         break
-def JOYTEL_order_esim(order_id, planCode, email, trans_id , order_id_for_close_cyberbiz):
+def JOYTEL_order_esim(order_id, planCode, email, trans_id , order_id_for_close_cyberbiz, retry_count=0):
     JOYTEL_SUBSCRIBE_API="https://api.joytel.vip/v2/customerApi/customerOrder"
     timestamp = int(int(time.time() * 1000))  
-
+    MAX_RETRY = 3
     with sqlite3.connect("orders.db", timeout=30) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT CUSTOMER_NAME, MOBILE_NUMBER FROM orders WHERE Trans_id = ?", (trans_id,))
@@ -610,6 +610,22 @@ def JOYTEL_order_esim(order_id, planCode, email, trans_id , order_id_for_close_c
             
     except Exception as e:
         logging.error(f"呼叫供應商API失敗: {e}")
+        # 更新狀態回 pending
+        if retry_count < MAX_RETRY:
+            logging.info(f"JOYTEL timeout，30秒後第{retry_count+1}次重試 trans_id={trans_id}")
+            time.sleep(30)
+            t = threading.Thread(target=JOYTEL_order_esim, args=(order_id, planCode, email, trans_id, order_id_for_close_cyberbiz, retry_count+1))
+            t.daemon = True
+            t.start()
+        else:
+            logging.error(f"JOYTEL 重試 {MAX_RETRY} 次仍失敗，標記 Failed trans_id={trans_id}")
+            with sqlite3.connect("orders.db", timeout=30) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE orders SET status='Failed', NOTE='timeout after retries' WHERE Trans_id=?",
+                    (trans_id,)
+                )
+                conn.commit()
 
 def generate_vendor3_sign(customer_code, customer_auth, type_, order_tid, receive_name, phone, timestamp, item_list):
     item_str = ""
