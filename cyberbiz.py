@@ -149,72 +149,85 @@ def cyberbiz_order():
         existing_count = cursor.fetchone()[0]
         
         if existing_count > 0:
-            logging.info(f"訂單 {order_id} 已存在，略過重複處理")
-            return jsonify({"status": "ok"})
-
-        for item in line_items:
-            qc=item.get("qc")
-
-            if qc not in AUTO_VENDOR:
-                logging.info(f"訂單 {order_id} 含有非AUTO_VENDOR商品，整筆跳過")
-                logging.info(f"訂單 {order_id} 需要人工處理")
+            # 檢查是否有未完成的項目
+            cursor.execute(
+                "SELECT Trans_id, PlanCode, email, order_id_for_close_cyberbiz, qc FROM orders WHERE order_id = ? AND status IN ('pending', 'processing')",
+                (order_id,)
+            )
+            pending_rows = cursor.fetchall()
+            
+            if not pending_rows:
+                logging.info(f"訂單 {order_id} 已存在且全部完成，略過")
                 return jsonify({"status": "ok"})
-        for item in line_items:   
-            qc=item.get("qc")
-            sku=item.get("sku")
-             
-            title=(item.get("title") or "").strip()
-            product_id=item.get("product_id")
-            line_items_id=item.get("id")
-            variant_title=(item.get("variant_title") or "").strip()
-            quantity=item.get("quantity")
-            try:
-                price = item.get("price") or 0
-            except (TypeError, ValueError):
-                price = 0
-            logging.info(f"Product ID: {product_id}")
-            logging.info(f"廠商編號: {qc}")
-            logging.info(f"產品名稱: {title}")
-            logging.info(f"產品類型: {variant_title}")
-            logging.info(f"產品代號: {sku}")
-            logging.info(f"備註欄位: {note}")
-            full_title = f"{title} {variant_title}" if variant_title else title
-            full_title = re.sub(r' +', ' ', full_title)
-            for i in range(quantity):
-                trans_id = str(uuid.uuid4()).replace("-", "")[:20]
-                auto_count += 1 
-                qty_index = existing_count + auto_count
-                today = datetime.datetime.now() #日期寫死 
-                use_date = int(today.timestamp())
-                cursor.execute(
-                    """INSERT INTO orders 
-                        (order_id, Created_AT, Trans_id, PlanCode, email, product_id, qc, 
-                        status, qrcode, Title, qty_index, QUANTITY, order_id_for_close_cyberbiz, 
-                        NOTE, line_items_id, PRICE, USE_DATE, MOBILE_NUMBER, CUSTOMER_NAME, BUSINESSN) 
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                        (order_id, created_at, trans_id, sku, email, product_id, qc,
-                        "pending", None, full_title, qty_index, quantity, order_id_for_close_cyberbiz, 
-                        note, line_items_id, price, use_date, mobile_number, Customer_name, None)
-                )
-                tasks.append((order_id, sku, email, trans_id, order_id_for_close_cyberbiz, qc))
+            else:
+                logging.info(f"訂單 {order_id} 已存在，但有 {len(pending_rows)} 筆未完成，補處理")
+                for row in pending_rows:
+                    trans_id_, sku_, email_, close_id_, qc_ = row
+                    tasks.append((order_id, sku_, email_, trans_id_, close_id_, qc_))
+        if existing_count == 0:
+            for item in line_items:
+                qc=item.get("qc")
+
+                if qc not in AUTO_VENDOR:
+                    logging.info(f"訂單 {order_id} 含有非AUTO_VENDOR商品，整筆跳過")
+                    logging.info(f"訂單 {order_id} 需要人工處理")
+                    return jsonify({"status": "ok"})
+            for item in line_items:   
+                qc=item.get("qc")
+                sku=item.get("sku")
+                
+                title=(item.get("title") or "").strip()
+                product_id=item.get("product_id")
+                line_items_id=item.get("id")
+                variant_title=(item.get("variant_title") or "").strip()
+                quantity=item.get("quantity")
+                try:
+                    price = item.get("price") or 0
+                except (TypeError, ValueError):
+                    price = 0
+                logging.info(f"Product ID: {product_id}")
+                logging.info(f"廠商編號: {qc}")
+                logging.info(f"產品名稱: {title}")
+                logging.info(f"產品類型: {variant_title}")
+                logging.info(f"產品代號: {sku}")
+                logging.info(f"備註欄位: {note}")
+                full_title = f"{title} {variant_title}" if variant_title else title
+                full_title = re.sub(r' +', ' ', full_title)
+                for i in range(quantity):
+                    trans_id = str(uuid.uuid4()).replace("-", "")[:20]
+                    auto_count += 1 
+                    qty_index = existing_count + auto_count
+                    today = datetime.datetime.now() #日期寫死 
+                    use_date = int(today.timestamp())
+                    cursor.execute(
+                        """INSERT INTO orders 
+                            (order_id, Created_AT, Trans_id, PlanCode, email, product_id, qc, 
+                            status, qrcode, Title, qty_index, QUANTITY, order_id_for_close_cyberbiz, 
+                            NOTE, line_items_id, PRICE, USE_DATE, MOBILE_NUMBER, CUSTOMER_NAME, BUSINESSN) 
+                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                            (order_id, created_at, trans_id, sku, email, product_id, qc,
+                            "pending", None, full_title, qty_index, quantity, order_id_for_close_cyberbiz, 
+                            note, line_items_id, price, use_date, mobile_number, Customer_name, None)
+                    )
+                    tasks.append((order_id, sku, email, trans_id, order_id_for_close_cyberbiz, qc))
+                
+            conn.commit()
             
-        conn.commit()
+        for task in tasks:
+            order_id_, sku_, email_, trans_id_, close_id_, qc_ = task
+            if qc_ == "AUTO001":
+                order_esim(order_id_, sku_, email_, trans_id_, close_id_)
+            elif qc_ == "AUTO002":
+                FTC_order_esim(order_id_, sku_, email_, trans_id_, close_id_)
+            elif qc_ == "AUTO003":
+                JOYTEL_order_esim(order_id_, sku_, email_, trans_id_, close_id_)
+            elif qc_ == "AUTO004":
+                Diysim_order_esim(order_id_, sku_, email_, trans_id_, close_id_)
+                
+        return jsonify({
+            "status": "ok",
+        })
         
-    for task in tasks:
-        order_id_, sku_, email_, trans_id_, close_id_, qc_ = task
-        if qc_ == "AUTO001":
-            order_esim(order_id_, sku_, email_, trans_id_, close_id_)
-        elif qc_ == "AUTO002":
-            FTC_order_esim(order_id_, sku_, email_, trans_id_, close_id_)
-        elif qc_ == "AUTO003":
-            JOYTEL_order_esim(order_id_, sku_, email_, trans_id_, close_id_)
-        elif qc_ == "AUTO004":
-            Diysim_order_esim(order_id_, sku_, email_, trans_id_, close_id_)
-            
-    return jsonify({
-        "status": "ok",
-    })
-    
 #RSP的訂購esim api
 Base_URL="https://neware.biz"
 def order_esim(order_id, planCode, email, trans_id , order_id_for_close_cyberbiz):
@@ -1743,16 +1756,26 @@ def download_report():
 def retry(trans_id):
     with sqlite3.connect("orders.db", timeout=30) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT order_id_for_close_cyberbiz FROM orders WHERE Trans_id=?", (trans_id,))
+        cursor.execute("SELECT order_id_for_close_cyberbiz, qc, order_id, PlanCode, email FROM orders WHERE Trans_id=?", (trans_id,))
         row = cursor.fetchone()
         if not row:
             return jsonify({"error": "找不到訂單"})
-        close_id = row[0]
-    
-    t = threading.Thread(target=poll_lpa, args=(trans_id, close_id))
+        close_id, qc, order_id, plan_code, email = row
+
+    if qc == "AUTO001":
+        t = threading.Thread(target=poll_lpa, args=(trans_id, close_id))
+    elif qc == "AUTO002":
+        t = threading.Thread(target=FTC_order_esim, args=(order_id, plan_code, email, trans_id, close_id))
+    elif qc == "AUTO003":
+        t = threading.Thread(target=JOYTEL_order_esim, args=(order_id, plan_code, email, trans_id, close_id))
+    elif qc == "AUTO004":
+        t = threading.Thread(target=Diysim_order_esim, args=(order_id, plan_code, email, trans_id, close_id))
+    else:
+        return jsonify({"error": f"未知廠商 {qc}"})
+
     t.daemon = True
     t.start()
-    return jsonify({"status": "ok", "message": f"重新觸發 {trans_id}"})
+    return jsonify({"status": "ok", "message": f"重新觸發 {trans_id} (qc={qc})"})
 
 @app.route("/favicon.png")
 def favicon():
