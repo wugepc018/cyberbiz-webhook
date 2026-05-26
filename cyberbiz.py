@@ -1779,7 +1779,7 @@ def retry(trans_id):
         close_id, qc, order_id, plan_code, email = row
 
     if qc == "AUTO001":
-        t = threading.Thread(target=poll_lpa, args=(trans_id, close_id))
+        t = threading.Thread(target=order_esim, args=(order_id, plan_code, email, trans_id, close_id))
     elif qc == "AUTO002":
         t = threading.Thread(target=FTC_order_esim, args=(order_id, plan_code, email, trans_id, close_id))
     elif qc == "AUTO003":
