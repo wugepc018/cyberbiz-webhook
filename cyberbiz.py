@@ -151,7 +151,7 @@ def cyberbiz_order():
         if existing_count > 0:
             # 檢查是否有未完成的項目
             cursor.execute(
-                "SELECT Trans_id, PlanCode, email, order_id_for_close_cyberbiz, qc FROM orders WHERE order_id = ? AND status IN ('pending', 'processing')",
+                "SELECT Trans_id, PlanCode, email, order_id_for_close_cyberbiz, qc, status FROM orders WHERE order_id = ? AND status IN ('pending', 'processing')",
                 (order_id,)
             )
             pending_rows = cursor.fetchall()
@@ -162,7 +162,10 @@ def cyberbiz_order():
             else:
                 logging.info(f"訂單 {order_id} 已存在，但有 {len(pending_rows)} 筆未完成，補處理")
                 for row in pending_rows:
-                    trans_id_, sku_, email_, close_id_, qc_ = row
+                    trans_id_, sku_, email_, close_id_, qc_, status_ = row
+                    if status_ == 'processing':
+                        logging.info(f"trans_id={trans_id_} 已在 processing，等 callback，略過")
+                        continue
                     tasks.append((order_id, sku_, email_, trans_id_, close_id_, qc_))
         if existing_count == 0:
             for item in line_items:
@@ -279,14 +282,17 @@ def order_esim(order_id, planCode, email, trans_id , order_id_for_close_cyberbiz
                 )
                 conn.commit()
         else:
-            logging.error(f"供應商回應失敗 code={response.json().get('code')} 內容={response.text}") 
-            with sqlite3.connect("orders.db", timeout=30) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "UPDATE orders SET status = 'Pending' WHERE Trans_id = ?",
-                    (trans_id,)
-                )
-                conn.commit()
+            res_code = response.json().get("code")
+            if res_code == "501":
+                logging.info(f"trans_id={trans_id} 已送過，保持 processing 等 callback")
+            else:
+                with sqlite3.connect("orders.db", timeout=30) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "UPDATE orders SET status = 'Failed' WHERE Trans_id = ? AND status != 'completed'",
+                        (trans_id,)
+                    )
+                    conn.commit()
             
     except Exception as e:
         logging.error(f"呼叫供應商API失敗: {e}")
@@ -1776,7 +1782,12 @@ def retry(trans_id):
         row = cursor.fetchone()
         if not row:
             return jsonify({"error": "找不到訂單"})
-        close_id, qc, order_id, plan_code, email = row
+        cursor.execute(
+            "UPDATE orders SET status = 'pending' WHERE Trans_id = ? AND status != 'completed'",
+            (trans_id,)
+        )
+        conn.commit()
+    close_id, qc, order_id, plan_code, email = row
 
     if qc == "AUTO001":
         t = threading.Thread(target=order_esim, args=(order_id, plan_code, email, trans_id, close_id))
