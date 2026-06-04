@@ -1120,9 +1120,10 @@ def orders():
             amount_params.append(order_id_query)
             
         if Cid_query:
-            sql += " AND c.CID = ?"
-            params.append(Cid_query)
-            amount_params.append(Cid_query)
+            sql += " AND c.CID LIKE ?"
+            params.append(f"%{Cid_query}%")
+            amount_params.append(f"%{Cid_query}%")
+            
         if status_query:
             sql += " AND o.status = ?"
             params.append(status_query)
@@ -1372,7 +1373,7 @@ def orders():
             </form>
             
             <div style="margin-bottom:15px; display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
-                <a href="/download_report?order_id={order_id_query or ''}&status={status_query or ''}&title={title_query or ''}&vendor={Vendor_query or ''}&date_from={date_from or ''}&date_to={date_to or ''}"
+                <a href="/download_report?order_id={order_id_query or ''}&CID={Cid_query or ''}status={status_query or ''}&title={title_query or ''}&vendor={Vendor_query or ''}&date_from={date_from or ''}&date_to={date_to or ''}"
                 style="
                         padding:6px 14px;
                         border:1.5px solid #1a9e5c;
