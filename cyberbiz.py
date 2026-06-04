@@ -151,7 +151,7 @@ def cyberbiz_order():
         if existing_count > 0:
             # 檢查是否有未完成的項目
             cursor.execute(
-                "SELECT Trans_id, PlanCode, email, order_id_for_close_cyberbiz, qc, status FROM orders WHERE order_id = ? AND status IN ('pending', 'processing')",
+                "SELECT Trans_id, PlanCode, email, order_id_for_close_cyberbiz, qc, status FROM orders WHERE order_id = ? AND status IN ('pending', 'processing', 'Failed')",
                 (order_id,)
             )
             pending_rows = cursor.fetchall()
@@ -242,7 +242,7 @@ def order_esim(order_id, planCode, email, trans_id , order_id_for_close_cyberbiz
     with sqlite3.connect("orders.db", timeout=30) as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "UPDATE orders SET status = 'processing' WHERE Trans_id = ? AND status = 'pending'",
+            "UPDATE orders SET status = 'processing' WHERE Trans_id = ? AND status IN ('pending', 'Failed')",
             (trans_id,)
         )
         conn.commit()
@@ -306,7 +306,7 @@ def Diysim_order_esim(order_id, planCode, email, trans_id , order_id_for_close_c
     with sqlite3.connect("orders.db", timeout=30) as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "UPDATE orders SET status = 'processing' WHERE Trans_id = ? AND status = 'pending'",
+            "UPDATE orders SET status = 'processing' WHERE Trans_id = ? AND status IN ('pending', 'Failed')",
             (trans_id,)
         )
         conn.commit()
@@ -363,7 +363,7 @@ def Diysim_order_esim(order_id, planCode, email, trans_id , order_id_for_close_c
             with sqlite3.connect("orders.db", timeout=30) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "UPDATE orders SET status = 'Pending' WHERE Trans_id = ?",
+                    "UPDATE orders SET status = 'Failed' WHERE Trans_id = ?  AND status != 'completed'",
                     (trans_id,)
                 )
                 conn.commit()
