@@ -1095,6 +1095,7 @@ def close_cyberbiz_order(order_id:int):
 @app.route("/orders")
 def orders():
     order_id_query = request.args.get("order_id")  
+    Cid_query = request.args.get("CID")  
     status_query = request.args.get("status")  
     title_query = request.args.get("title", "").strip()
     Vendor_query = request.args.get("vendor")  
@@ -1118,6 +1119,10 @@ def orders():
             params.append(order_id_query)
             amount_params.append(order_id_query)
             
+        if Cid_query:
+            sql += " AND c.CID = ?"
+            params.append(Cid_query)
+            amount_params.append(Cid_query)
         if status_query:
             sql += " AND o.status = ?"
             params.append(status_query)
@@ -1151,6 +1156,8 @@ def orders():
         total_amount_sql = "SELECT SUM(o.PRICE) FROM orders o LEFT JOIN CID_TABLE c ON o.Trans_id = c.Trans_id WHERE 1=1"
         if order_id_query:
             total_amount_sql += " AND o.order_id = ?"
+        if Cid_query:
+            total_amount_sql += " AND c.CID = ?"
         if status_query:
             total_amount_sql += " AND o.status = ?"
         if title_query:
@@ -1175,6 +1182,7 @@ def orders():
     def build_url(p):
         args = {
             "order_id": order_id_query or "",
+            "CID": Cid_query or "",
             "status": status_query or "",
             "title": title_query or "",
             "vendor": Vendor_query or "",
@@ -1326,6 +1334,10 @@ def orders():
             
                 <input type="text" name="order_id" placeholder="輸入訂單單號" 
                     value="{order_id_query if order_id_query else ''}"
+                    style="padding:5px; width:200px; font-family: 'Segoe UI', Arial, sans-serif;">
+                    
+                <input type="text" name="CID" placeholder="查詢 CID" 
+                    value="{Cid_query if Cid_query else ''}"
                     style="padding:5px; width:200px; font-family: 'Segoe UI', Arial, sans-serif;">
                     
                 <input type="text" name="title" placeholder="輸入產品名稱" 
