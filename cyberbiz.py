@@ -1817,6 +1817,27 @@ def retry(trans_id):
     t.start()
     return jsonify({"status": "ok", "message": f"重新觸發 {trans_id} (qc={qc})"})
 
+@app.route("/retry_poll/<trans_id>")
+def retry_poll(trans_id):
+    with sqlite3.connect("orders.db", timeout=30) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT order_id_for_close_cyberbiz, qc FROM orders WHERE Trans_id = ? AND status = 'processing'",
+            (trans_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"error": "找不到 processing 狀態的訂單"})
+        close_id, qc = row
+
+    if qc != "AUTO002":
+        return jsonify({"error": f"此訂單廠商為 {qc}，不是 FTC"})
+
+    t = threading.Thread(target=poll_lpa, args=(trans_id, close_id))
+    t.daemon = True
+    t.start()
+    
+    return jsonify({"status": "ok", "message": f"已重新觸發 poll_lpa，trans_id={trans_id}"})
 @app.route("/favicon.png")
 def favicon():
     return send_file("/root/app/cyberbiz-webhook/favicon.png", mimetype="image/png")
