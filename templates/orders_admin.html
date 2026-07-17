@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+{% block title %}吳哥鋪ESIM管理後台{% endblock %}
+
+{% block extra_head %}
+<link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.js"></script>
+{% endblock %}
+
+{% block body %}
+
+<div class="admin-layout">
+
+    <!-- 左側選單（全高，含標題） -->
+    <div class="sidebar">
+
+        <div class="sidebar-header">
+            <h1>吳哥鋪 ESIM</h1>
+            <p>管理後台</p>
+        </div>
+
+        <div class="sidebar-nav">
+
+            <button
+                type="button"
+                class="tab-btn"
+                id="tabbtn-orders"
+                onclick="switchTab('orders')">
+                📦 訂單列表
+            </button>
+
+            <button
+                type="button"
+                class="tab-btn"
+                id="tabbtn-templates"
+                onclick="switchTab('templates')">
+                ✉️ Email 樣板管理
+            </button>
+
+        </div>
+
+    </div>
+
+    <!-- 右側內容 -->
+    <div class="content-area">
+
+        <!-- =================== 訂單 =================== -->
+        <div class="tab-panel" id="panel-orders">
+
+            <div class="card">
+
+                <div class="panel-header">
+                    <h2>訂單列表</h2>
+                    <div class="header-actions">
+                        <a href="{{ download_report_url }}" class="btn-link success">
+                            <i data-lucide="download"></i> 下載 Excel
+                        </a>
+                    </div>
+                </div>
+
+                <form method="get" action="/orders" class="filter-form">
+
+                    <!-- 主搜尋列：訂單單號與 CID 各自獨立欄位 -->
+                    <div class="search-row">
+
+                        <input type="text"
+                               name="order_id"
+                               placeholder="輸入訂單單號"
+                               value="{{ order_id_query or '' }}">
+
+                        <input type="text"
+                               name="CID"
+                               placeholder="查詢 CID"
+                               value="{{ cid_query or '' }}">
+
+                        <select name="status">
+
+                            <option value="">全部狀態</option>
+
+                            <option value="pending"
+                            {% if status_query=="pending" %}selected{% endif %}>
+                                Pending
+                            </option>
+
+                            <option value="processing"
+                            {% if status_query=="processing" %}selected{% endif %}>
+                                Processing
+                            </option>
+
+                            <option value="Failed"
+                            {% if status_query=="Failed" %}selected{% endif %}>
+                                Failed
+                            </option>
+
+                            <option value="completed"
+                            {% if status_query=="completed" %}selected{% endif %}>
+                                Completed
+                            </option>
+
+                        </select>
+
+                        <button type="submit"><i data-lucide="search"></i> 搜尋</button>
+
+                    </div>
+
+                    <!-- 進階篩選（可展開/收合）：產品名稱、廠商代號、訂購日期範圍 -->
+                    <button type="button"
+                            class="advanced-toggle"
+                            id="advancedToggle"
+                            onclick="toggleAdvanced()">
+                        <i data-lucide="chevron-down"></i> 進階篩選
+                    </button>
+
+                    <div class="advanced-filters" id="advancedFilters">
+
+                        <input type="text"
+                               name="title"
+                               placeholder="產品名稱"
+                               value="{{ title_query or '' }}">
+
+                        <input type="text"
+                               name="vendor"
+                               placeholder="廠商代號"
+                               value="{{ vendor_query or '' }}">
+
+                        <input type="date"
+                               name="date_from"
+                               value="{{ date_from or '' }}">
+
+                        <span>～</span>
+
+                        <input type="date"
+                               name="date_to"
+                               value="{{ date_to or '' }}">
+
+                        <a href="/orders" class="btn-link cancel">清除</a>
+
+                    </div>
+
+                </form>
+
+                <!-- 統計卡片：符合條件筆數 / 總金額 -->
+                <div class="stats-row">
+                    <div class="stat-card">
+                        <div class="stat-label">符合條件筆數</div>
+                        <div class="stat-value">{{ total }} 筆</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">總金額</div>
+                        <div class="stat-value">${{ total_amount }}</div>
+                    </div>
+                </div>
+
+            <!-- 表格外層加上 table-scroll 容器，
+                 讓側邊欄擠壓空間不夠時可以水平捲動，而不是欄位被壓縮換行 -->
+            <div class="table-scroll">
+            <table class="orders-table">
+                <!-- 明確分配每欄寬度。
+                     產品名稱、PlanCode 通常內容最長，給予較寬的固定寬度；
+                     代碼型欄位（訂單單號/CID/廠商代號）維持窄寬度，避免被擠壓 -->
+                <colgroup>
+                    <col style="width:120px;">
+                    <col style="width:170px;">
+                    <col style="width:120px;">
+                    <col style="width:240px;">
+                    <col style="width:110px;">
+                    <col style="width:60px;">
+                    <col style="width:260px;">
+                    <col style="width:80px;">
+                    <col style="width:100px;">
+                    <col style="width:110px;">
+                    <col style="width:140px;">
+                </colgroup>
+                <tr>
+                    <th>訂購日期</th>
+                    <th>e-mail</th>
+                    <th>訂單單號</th>
+                    <th>產品名稱</th>
+                    <th>CID</th>
+                    <th>數量</th>
+                    <th>PlanCode</th>
+                    <th>金額</th>
+                    <th>廠商代號</th>
+                    <th>狀態</th>
+                    <th>備註</th>
+                </tr>
+                {% for row in rows %}
+                <tr>
+                    <!-- 日期時間明確拆成兩行（日期／時間），
+                         用 split('T') 拆開後手動加 <br>，
+                         不依賴欄寬自然換行，之後改欄寬也不會跑掉 -->
+                    {% set dt_parts = row.created_at.split('T') if row.created_at and 'T' in row.created_at else [row.created_at or '-', ''] %}
+                    <td class="code date-cell">{{ dt_parts[0] }}<br>{{ dt_parts[1] }}</td>
+
+                    <!-- email 欄位固定寬度截斷，
+                         title 屬性讓使用者 hover 時能看到完整地址 -->
+                    <td class="email-cell" title="{{ row.email }}">{{ row.email }}</td>
+
+                    <td class="code">{{ row.order_id }}</td>
+                    <td class="product-cell">{{ row.title }}</td>
+                    <td class="code">{{ row.cid }}</td>
+                    <td>1</td>
+                    <td class="product-cell">{{ row.plan_code }}</td>
+                    <td class="code amount-cell">{{ row.cost }}</td>
+                    <td class="code">{{ row.qc }}</td>
+
+                    <!-- 狀態改成實心色塊徽章樣式，
+                         沿用原本的 completed/processing/pending/Failed class 決定顏色 -->
+                    <td>
+                        <span class="status-badge {{ row.status }}">{{ row.status }}</span>
+                    </td>
+
+                    <td>{{ row.note }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            </div><!-- /.table-scroll -->
+
+            <div class="pagination">
+                共 {{ total }} 筆　第 {{ page }} / {{ total_pages }} 頁　
+                {% if page > 1 %}
+                    <a href="{{ build_url(1) }}">«</a>
+                    <a href="{{ build_url(page - 1) }}">上一頁</a>
+                {% endif %}
+                {% if page < total_pages %}
+                    <a href="{{ build_url(page + 1) }}">下一頁</a>
+                    <a href="{{ build_url(total_pages) }}">»</a>
+                {% endif %}
+            </div>
+
+            </div><!-- /.card (訂單) -->
+
+        </div><!-- /#panel-orders -->
+
+        <!-- =================== Email =================== -->
+
+        <div class="tab-panel" id="panel-templates">
+
+            <div class="card">
+
+                <div class="template-toolbar">
+
+                    <a href="#"
+                       class="btn-link"
+                       onclick="openNewModal();return false;">
+                        <i data-lucide="plus"></i> 新增產品樣板
+                    </a>
+
+                    <input
+                        type="text"
+                        id="planSearch"
+                        placeholder="搜尋 PlanCode 或名稱">
+
+                </div>
+
+            <table class="templates-table" id="templates-table">
+                <tr><th>PlanCode</th><th>名稱</th><th>更新時間</th><th style="width:120px;"></th></tr>
+                {% for t in template_rows %}
+                <tr id="row-{{ t.plan_code }}">
+                    <td>{{ t.plan_code }}</td>
+                    <td class="cell-name">{{ t.product_name or '-' }}</td>
+                    <td class="cell-updated">{{ t.updated_at or '-' }}</td>
+                    <td>
+                        <span class="table-actions">
+                            <button type="button" class="icon-btn" title="編輯"
+                                    onclick="openModal('{{ t.plan_code }}')">
+                                <i data-lucide="pencil"></i>
+                            </button>
+                            <a href="/admin/templates/preview/{{ t.plan_code }}"
+                               target="_blank" class="icon-btn" title="預覽">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <button type="button" class="icon-btn" title="複製"
+                                    onclick="copyTemplate('{{ t.plan_code }}')">
+                                <i data-lucide="copy"></i>
+                            </button>
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
+
+            <div class="modal-overlay" id="modalOverlay">
+                <div class="modal-box">
+                    <h3 id="modalTitle">編輯樣板</h3>
+                    <input type="hidden" id="modalPlanCode">
+                    <label>PlanCode</label>
+                    <input type="text" id="modalPlanCodeInput" placeholder="例如：JP_5GB_7D">
+                    <p id="modalPlanCodeError" class="field-error"></p>
+                    <label>名稱</label>
+                    <input type="text" id="modalProductName">
+                    <label>主旨</label>
+                    <input type="text" id="modalSubject">
+                    <label>產品說明內容</label>
+                    <div id="modalEditor" style="height:150px;"></div>
+                    <div class="hint">
+                        <span>ℹ️</span>
+                        <span>安裝步驟、QR code、注意事項、客服 LINE 會自動加在信件開頭結尾，這裡只需填寫這個產品的專屬說明。</span>
+                    </div>
+                    <p id="modalError"></p>
+                    <div class="modal-actions">
+                        <button onclick="saveModal()">儲存</button>
+                        <button class="cancel" onclick="closeModal()">取消</button>
+                    </div>
+                </div><!-- /.modal-box -->
+            </div><!-- /.modal-overlay -->
+
+            </div><!-- /.card (樣板) -->
+
+        </div><!-- /#panel-templates -->
+
+    </div><!-- /.content-area -->
+
+</div><!-- /.admin-layout -->
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Flask 傳來的樣板資料，鍵為 PlanCode
+    window.TEMPLATES = {{ templates_json | safe }};
+</script>
+<script src="{{ url_for('static', filename='js/orders_admin.js') }}"></script>
+{% endblock %}

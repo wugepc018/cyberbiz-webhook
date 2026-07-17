@@ -1,0 +1,523 @@
+*{box-sizing:border-box;}
+
+body{
+    margin:0;
+    padding:0;
+    font-family:'Segoe UI',Arial,sans-serif;
+    background:#f5f7fb;
+    color:#333;
+    min-height:100vh;
+}
+
+h2{
+    margin:0 0 24px;
+    font-size:24px;
+    font-weight:600;
+    color:#1f2937;
+}
+
+h3{font-size:18px;margin:0 0 16px;color:#1f2937;}
+
+.admin-layout{
+    display:flex;
+    align-items:stretch;
+    min-height:100vh;
+}
+
+/* ---------- 側邊欄：全高、含標題區塊 ---------- */
+.sidebar{
+    width:240px;
+    background:#fff;
+    box-shadow:2px 0 10px rgba(0,0,0,.05);
+    flex-shrink:0;
+    display:flex;
+    flex-direction:column;
+}
+
+.sidebar-header{
+    padding:28px 24px 20px;
+    border-bottom:1px solid #eee;
+}
+.sidebar-header h1{
+    margin:0;
+    font-size:20px;
+    font-weight:700;
+    color:#f97316;
+}
+.sidebar-header p{
+    margin:4px 0 0;
+    font-size:12px;
+    color:#9ca3af;
+}
+
+.sidebar-nav{
+    flex:1;
+    padding-top:8px;
+}
+
+.sidebar .tab-btn{
+    width:100%;
+    display:block;
+    text-align:left;
+    border:none;
+    border-left:4px solid transparent;
+    background:#fff;
+    color:#1f2937;
+    padding:16px 20px;
+    font-size:15px;
+    font-weight:500;
+    cursor:pointer;
+    transition:background .15s ease;
+    border-radius:0;
+}
+.sidebar .tab-btn:hover{
+    background:#f8f8f8;
+    color:#1f2937;
+}
+.sidebar .tab-btn.active{
+    background:#fff3eb;
+    color:#f97316;
+    border-left-color:#f97316;
+    font-weight:600;
+}
+.sidebar .tab-btn.active:hover{background:#fff3eb;color:#f97316;}
+
+.content-area{
+    flex:1;
+    min-width:0;
+    padding:28px 36px;
+}
+
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+
+.card{
+    background:#fff;
+    border-radius:12px;
+    padding:24px;
+    box-shadow:0 2px 10px rgba(0,0,0,.08);
+    margin-bottom:24px;
+}
+
+/* ---------- 按鈕：實心填滿風格，不再是外框反轉 hover ---------- */
+button,.btn-link{
+    font-size:14px;
+    font-weight:600;
+    padding:9px 18px;
+    border-radius:8px;
+    border:none;
+    background:#1e3a5f;
+    color:#fff;
+    text-decoration:none;
+    cursor:pointer;
+    transition:background .15s ease;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+}
+button:hover,.btn-link:hover{
+    background:#16304e;
+    color:#fff;
+}
+button:active,.btn-link:active{
+    background:#0f2338;
+}
+
+/* 次要按鈕（取消/清除）：淺灰底，不搶眼 */
+button.cancel,.btn-link.cancel{
+    background:#eef0f3;
+    color:#555;
+}
+button.cancel:hover,.btn-link.cancel:hover{
+    background:#e0e3e8;
+    color:#333!important;
+}
+
+/* 成功類按鈕（下載 Excel）：綠色實心 */
+button.success,.btn-link.success{
+    background:#16a34a;
+    color:#fff;
+}
+button.success:hover,.btn-link.success:hover{
+    background:#128a3e;
+    color:#fff!important;
+}
+
+input,select{
+    border:1px solid #d1d5db;
+    border-radius:6px;
+    padding:8px 10px;
+    font-size:14px;
+}
+input:focus,select:focus{
+    outline:none;
+    border-color:#1e3a5f;
+    box-shadow:0 0 0 3px rgba(30,58,95,.15);
+}
+
+.filter-form{
+    margin-bottom:18px;
+}
+
+/* ---------- 主搜尋列：訂單單號 / CID 各自獨立欄位 + 狀態 + 搜尋 ---------- */
+.search-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    align-items:center;
+}
+.search-row input[type=text],
+.search-row select{
+    flex:1 1 160px;
+    min-width:140px;
+}
+
+/* ---------- 進階篩選：可展開/收合 ---------- */
+.advanced-toggle{
+    background:none;
+    border:none;
+    color:#1e3a5f;
+    font-size:13px;
+    font-weight:600;
+    padding:10px 0 0;
+    cursor:pointer;
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+}
+.advanced-toggle:hover{
+    background:none;
+    color:#16304e;
+    text-decoration:underline;
+}
+.advanced-toggle svg{
+    width:16px;
+    height:16px;
+    transition:transform .15s ease;
+}
+.advanced-toggle.open svg{
+    transform:rotate(180deg);
+}
+
+.advanced-filters{
+    display:none;
+    flex-wrap:wrap;
+    gap:10px;
+    align-items:center;
+    margin-top:14px;
+    padding-top:14px;
+    border-top:1px dashed #e5e7eb;
+}
+.advanced-filters.open{
+    display:flex;
+}
+.advanced-filters input[type=text]{
+    flex:1 1 160px;
+    min-width:140px;
+}
+
+/* ---------- 統計卡片：符合條件筆數 / 總金額 ---------- */
+.stats-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:16px;
+    margin-bottom:18px;
+}
+.stat-card{
+    flex:1 1 200px;
+    background:#f8fafc;
+    border:1px solid #eef0f3;
+    border-radius:10px;
+    padding:16px 20px;
+}
+.stat-label{
+    font-size:13px;
+    color:#6b7280;
+    margin-bottom:6px;
+}
+.stat-value{
+    font-size:26px;
+    font-weight:700;
+    color:#1f2937;
+}
+
+.panel-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:20px;
+}
+.panel-header h2{
+    margin:0;
+}
+.header-actions{
+    display:flex;
+    align-items:center;
+    gap:10px;
+}
+
+.report-actions{
+    display:flex;
+    justify-content:flex-end;
+    gap:12px;
+    align-items:center;
+    margin-bottom:18px;
+}
+
+.template-toolbar{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:18px;
+}
+
+#planSearch{
+    width:260px;
+}
+
+table{
+    width:100%;
+    border-collapse:collapse;
+    background:#fff;
+    border-radius:10px;
+    overflow:hidden;
+}
+
+th{
+    background:#f3f4f6;
+    color:#555;
+    text-align:left;
+    padding:12px;
+    border:1px solid #e5e7eb;
+    font-size:13px;
+}
+
+td{
+    padding:12px;
+    border:1px solid #e5e7eb;
+    font-size:13px;
+    word-break:break-word;
+}
+
+tbody tr:hover td{background:#f8fbff;}
+
+.pagination{
+    margin-top:18px;
+    display:flex;
+    gap:6px;
+    align-items:center;
+    flex-wrap:wrap;
+}
+.pagination a{
+    text-decoration:none;
+    border:1px solid #d1d5db;
+    padding:4px 10px;
+    border-radius:4px;
+    color:#555;
+}
+.pagination a:hover{
+    background:#1e3a5f;
+    border-color:#1e3a5f;
+    color:#fff;
+}
+
+.templates-table td a{
+    text-decoration:none;
+    color:#2563eb;
+}
+.templates-table td a:hover{text-decoration:underline;}
+
+/* ---------- 樣板管理：操作圖示按鈕 ---------- */
+.table-actions{
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+}
+.icon-btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:30px;
+    height:30px;
+    padding:0;
+    border-radius:6px;
+    border:none;
+    background:transparent;
+    color:#6b7280;
+    cursor:pointer;
+    text-decoration:none;
+    transition:background .15s ease,color .15s ease;
+}
+.icon-btn:hover{
+    background:#f3f4f6;
+    color:#1f2937;
+}
+.icon-btn svg{
+    width:16px;
+    height:16px;
+}
+.th-sort{
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    cursor:pointer;
+}
+.th-sort svg{
+    width:14px;
+    height:14px;
+}
+
+.modal-overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.45);
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    z-index:999;
+    opacity:0;
+    visibility:hidden;
+    pointer-events:none;
+    transition:opacity 180ms ease-out, visibility 180ms ease-out;
+}
+.modal-overlay.show{
+    opacity:1;
+    visibility:visible;
+    pointer-events:auto;
+}
+
+.modal-box{
+    background:#fff;
+    width:700px;
+    max-width:90vw;
+    max-height:90vh;
+    overflow:auto;
+    border-radius:12px;
+    padding:24px;
+    box-shadow:0 10px 30px rgba(0,0,0,.25);
+    transform:scale(0.97) translateY(4px);
+    transition:transform 180ms ease-out;
+}
+.modal-overlay.show .modal-box{
+    transform:scale(1) translateY(0);
+}
+
+.modal-box label{
+    display:block;
+    margin:14px 0 6px;
+    font-size:13px;
+    color:#666;
+}
+.modal-box input[type=text]{
+    width:100%;
+}
+.modal-box input:disabled{
+    background:#f3f4f6;
+}
+
+#modalEditor{
+    height:180px;
+    background:#fff;
+}
+
+.hint{
+    margin-top:16px;
+    background:#f5f7fb;
+    border-left:4px solid #60a5fa;
+    padding:12px 14px;
+    border-radius:6px;
+    line-height:1.6;
+    color:#555;
+}
+
+.modal-actions{
+    margin-top:18px;
+}
+
+#modalError{
+    color:#dc2626;
+    margin-top:12px;
+}
+
+.status-table th{text-align:left;}
+
+
+/* =====================================================================
+   以下為訂單表格優化新增樣式
+   目的：解決側邊欄擠壓後，e-mail / 廠商代號 / 狀態欄位文字被壓縮換行的問題
+   ===================================================================== */
+
+/* 關鍵 1：表格外層捲動容器
+   側邊欄 + 表格總寬度不夠時，讓表格整體出現水平捲軸，
+   而不是讓每一欄被迫縮小、文字斷行 */
+.table-scroll{
+    overflow-x:auto;
+    border-radius:10px;
+}
+
+/* 訂單表格設定最小寬度，保證每欄有足夠空間顯示，
+   寬度不足時交給 .table-scroll 處理捲動，而不是壓縮欄位 */
+.orders-table{
+    min-width:1080px;
+}
+
+/* 表頭文字不換行，避免欄名本身被拆行 */
+.orders-table th{
+    white-space:nowrap;
+}
+
+/* 關鍵 2：代碼型欄位（訂單單號、CID、廠商代號、金額）
+   不換行 + 等寬字體，避免像 AUTO001 被拆成 AUTO / 001 兩行 */
+.orders-table td.code{
+    white-space:nowrap;
+    font-family:"SF Mono","IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+    font-size:12.5px;
+}
+
+.orders-table td.amount-cell{
+    font-weight:700;
+}
+
+/* 關鍵 2-1：日期欄位改為明確用 <br> 拆成日期／時間兩行（見模板），
+   這裡設定 nowrap 是為了避免「日期」或「時間」各自的字串又被意外換行，
+   實際換行位置完全由模板裡的 <br> 決定，不受欄寬影響 */
+.orders-table td.date-cell{
+    white-space:nowrap;
+    line-height:1.5;
+}
+
+/* 關鍵 3：e-mail 欄位固定寬度 + 截斷顯示，
+   hover 時透過 title 屬性顯示完整地址，不會撐開或擠壓其他欄位 */
+.orders-table td.email-cell{
+    max-width:190px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    font-family:"SF Mono","IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+    font-size:12px;
+    color:#4b5563;
+}
+
+/* 產品名稱 / PlanCode 欄位：允許換行，但限制最大寬度避免過寬 */
+.orders-table td.product-cell{
+    max-width:220px;
+    line-height:1.5;
+}
+
+/* 關鍵 4：狀態改成實心色塊徽章樣式（依照設計稿），
+   淺底色 + 深色文字，比色點更醒目、辨識度更高 */
+.status-badge{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    font-size:12px;
+    font-weight:700;
+    white-space:nowrap;
+    padding:4px 12px;
+    border-radius:999px;
+}
+
+.status-badge.completed{background:#dcfce7;color:#16a34a;}
+.status-badge.processing{background:#dbeafe;color:#2563eb;}
+.status-badge.pending{background:#f3f4f6;color:#9ca3af;}
+.status-badge.Failed{background:#fee2e2;color:#dc2626;}
