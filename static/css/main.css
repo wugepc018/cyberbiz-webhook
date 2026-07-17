@@ -105,22 +105,27 @@ button,.btn-link{
     font-weight:600;
     padding:9px 18px;
     border-radius:8px;
-    border:none;
-    background:#1e3a5f;
+    border:1px solid #163a5f;
+    background:linear-gradient(180deg,#25507f 0%,#1e3a5f 100%);
     color:#fff;
     text-decoration:none;
     cursor:pointer;
-    transition:background .15s ease;
+    box-shadow:0 2px 8px rgba(30,58,95,.25);
+    transition:background .15s ease, box-shadow .15s ease, transform .1s ease, border-color .15s ease;
     display:inline-flex;
     align-items:center;
     gap:6px;
 }
 button:hover,.btn-link:hover{
-    background:#16304e;
+    background:linear-gradient(180deg,#1e3a5f 0%,#16304e 100%);
+    border-color:#16304e;
+    box-shadow:0 4px 12px rgba(30,58,95,.3);
     color:#fff;
 }
 button:active,.btn-link:active{
     background:#0f2338;
+    transform:translateY(1px);
+    box-shadow:0 1px 4px rgba(30,58,95,.2);
 }
 
 /* 次要按鈕（取消/清除）：淺灰底，不搶眼 */
@@ -135,14 +140,22 @@ button.cancel:hover,.btn-link.cancel:hover{
 
 /* 成功類按鈕（下載 Excel）：綠色實心 */
 button.success,.btn-link.success{
-    background:#16a34a;
+    background:linear-gradient(180deg,#22c55e 0%,#16a34a 100%);
+    border-color:#128a3e;
     color:#fff;
+    box-shadow:0 2px 8px rgba(22,163,74,.28);
 }
 button.success:hover,.btn-link.success:hover{
-    background:#128a3e;
+    background:linear-gradient(180deg,#16a34a 0%,#128a3e 100%);
+    border-color:#0f7a35;
+    box-shadow:0 4px 12px rgba(22,163,74,.35);
     color:#fff!important;
 }
-
+button.success:active,.btn-link.success:active{
+    background:#0f7a35;
+    transform:translateY(1px);
+    box-shadow:0 1px 4px rgba(22,163,74,.22);
+}
 input,select{
     border:1px solid #d1d5db;
     border-radius:6px;
@@ -515,6 +528,12 @@ tbody tr:hover td{background:#f8fbff;}
     white-space:nowrap;
     padding:4px 12px;
     border-radius:999px;
+}
+.btn-link.success i{
+    transition:transform .15s ease;
+}
+.btn-link.success:hover i{
+    transform:translateY(2px);
 }
 
 .status-badge.completed{background:#dcfce7;color:#16a34a;}
