@@ -607,3 +607,24 @@ tbody tr:hover td{background:#f8fbff;}
     position:relative;
     z-index:1;
 }
+.locked-editable{
+    min-height:36px;
+    border:0.5px solid var(--border);
+    border-radius:var(--radius);
+    padding:8px 10px;
+    font-size:14px;
+}
+.locked-editable:focus{
+    outline:none;
+    border-color:#1e3a5f;
+    box-shadow:0 0 0 3px rgba(30,58,95,.15);
+}
+.locked-chip{
+    display:inline-block;
+    background:#f3f4f6;
+    color:#6b7280;
+    padding:1px 6px;
+    border-radius:4px;
+    font-weight:500;
+    user-select:none;
+}

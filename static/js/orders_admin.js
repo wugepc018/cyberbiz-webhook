@@ -93,8 +93,8 @@ function openModal(pc) {
     document.getElementById('modalPlanCodeInput').value = pc;
     document.getElementById('modalPlanCodeInput').disabled = true;
     document.getElementById('modalProductName').value = data.product_name;
-    document.getElementById('modalSubject').value = data.subject;
-    quillModal.root.innerHTML = data.intro_note;
+    document.getElementById('modalSubjectEditable').innerHTML = placeholdersToLockedHtml(data.subject);
+    setEditorWithLockedPlaceholders(data.intro_note);
     document.getElementById('modalError').innerText = '';
     document.getElementById('modalPlanCodeError').innerText = '';
     document.getElementById('modalOverlay').classList.add('show');
@@ -108,12 +108,12 @@ function openNewModal() {
     document.getElementById('modalPlanCodeInput').value = '';
     document.getElementById('modalPlanCodeInput').disabled = false;
     document.getElementById('modalProductName').value = '';
-    document.getElementById('modalSubject').value = '[[product_name]]（共[[count]]張）';
-    quillModal.root.innerHTML = '<p>你好，以下是你的 [[product_name]] 安裝說明：</p>';
+    document.getElementById('modalSubjectEditable').innerHTML = placeholdersToLockedHtml('[[product_name]]（共[[count]]張）');
+    setEditorWithLockedPlaceholders('你好，以下是你的 [[product_name]] 安裝說明：');
     document.getElementById('modalError').innerText = '';
     document.getElementById('modalPlanCodeError').innerText = '';
     document.getElementById('modalOverlay').classList.add('show');
-
+    
     // modal 開啟動畫跑完後把游標放進 PlanCode 欄位，體感比較順
     setTimeout(function () {
         document.getElementById('modalPlanCodeInput').focus();
@@ -131,8 +131,8 @@ function copyTemplate(pc) {
     document.getElementById('modalPlanCodeInput').value = '';
     document.getElementById('modalPlanCodeInput').disabled = false;
     document.getElementById('modalProductName').value = source.product_name ? (source.product_name + ' (複製)') : '';
-    document.getElementById('modalSubject').value = source.subject || '';
-    quillModal.root.innerHTML = source.intro_note || '';
+    document.getElementById('modalSubjectEditable').innerHTML = placeholdersToLockedHtml(source.subject || '');
+    setEditorWithLockedPlaceholders(source.intro_note || '');
     document.getElementById('modalError').innerText = '';
     document.getElementById('modalPlanCodeError').innerText = '';
     document.getElementById('modalOverlay').classList.add('show');
@@ -169,8 +169,8 @@ function saveModal() {
     var payload = {
         PlanCode: pc,
         product_name: document.getElementById('modalProductName').value,
-        subject: document.getElementById('modalSubject').value,
-        intro_note: quillModal.root.innerHTML
+        subject: lockedHtmlToPlaceholders(document.getElementById('modalSubjectEditable')),
+        intro_note: getEditorHtmlWithPlaceholders()
     };
     fetch('/admin/templates/api/save', {
         method: 'POST',
@@ -218,4 +218,66 @@ function saveModal() {
 }
 function toggleNote(el) {
     el.classList.toggle('expanded');
+}
+// ---------- 鎖定灰字：把 [[key]] 轉成不可編輯的灰色 span，反向轉回時用 ----------
+var LOCKED_LABELS = { product_name: '示範方案', count: '2' };
+
+function placeholdersToLockedHtml(text) {
+    return (text || '').replace(/\[\[(\w+)\]\]/g, function (m, key) {
+        var label = LOCKED_LABELS[key] || key;
+        return '<span class="locked-chip" contenteditable="false" data-key="' + key + '">' + label + '</span>';
+    });
+}
+
+function lockedHtmlToPlaceholders(container) {
+    var clone = container.cloneNode(true);
+    clone.querySelectorAll('.locked-chip').forEach(function (el) {
+        el.replaceWith('[[' + el.getAttribute('data-key') + ']]');
+    });
+    return clone.textContent;
+}
+
+// Quill embed blot：讓內容編輯器裡的灰字也不可編輯
+var Embed = Quill.import('blots/embed');
+class PlaceholderBlot extends Embed {
+    static create(key) {
+        var node = super.create();
+        node.setAttribute('data-key', key);
+        node.classList.add('locked-chip');
+        node.innerText = LOCKED_LABELS[key] || key;
+        return node;
+    }
+    static value(node) {
+        return node.getAttribute('data-key');
+    }
+}
+PlaceholderBlot.blotName = 'placeholder';
+PlaceholderBlot.tagName = 'span';
+Quill.register(PlaceholderBlot);
+
+function setEditorWithLockedPlaceholders(html) {
+    var parts = (html || '').split(/(\[\[\w+\]\])/g);
+    var delta = { ops: [] };
+    parts.forEach(function (part) {
+        var match = part.match(/^\[\[(\w+)\]\]$/);
+        if (match) {
+            delta.ops.push({ insert: { placeholder: match[1] } });
+        } else if (part) {
+            delta.ops.push({ insert: part });
+        }
+    });
+    quillModal.setContents(delta);
+}
+
+function getEditorHtmlWithPlaceholders() {
+    var delta = quillModal.getContents();
+    var html = '';
+    delta.ops.forEach(function (op) {
+        if (typeof op.insert === 'string') {
+            html += op.insert.replace(/\n/g, '<br>');
+        } else if (op.insert && op.insert.placeholder) {
+            html += '[[' + op.insert.placeholder + ']]';
+        }
+    });
+    return html;
 }

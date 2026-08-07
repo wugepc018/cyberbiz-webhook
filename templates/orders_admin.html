@@ -284,19 +284,29 @@
                 <div class="modal-box">
                     <h3 id="modalTitle">編輯樣板</h3>
                     <input type="hidden" id="modalPlanCode">
-                    <label>PlanCode</label>
-                    <input type="text" id="modalPlanCodeInput" placeholder="例如：JP_5GB_7D">
-                    <p id="modalPlanCodeError" class="field-error"></p>
-                    <label>名稱</label>
-                    <input type="text" id="modalProductName">
-                    <label>主旨</label>
-                    <input type="text" id="modalSubject">
-                    <label>產品說明內容</label>
-                    <div id="modalEditor" style="height:150px;"></div>
-                    <div class="hint">
-                        <span>ℹ️</span>
-                        <span>安裝步驟、QR code、注意事項、客服 LINE 會自動加在信件開頭結尾，這裡只需填寫這個產品的專屬說明。</span>
+                    <div class="modal-step">
+                        <div class="step-label"><span class="step-num">1</span> 這個樣板要套用在哪個方案？</div>
+                        <input type="text" id="modalPlanCodeInput" placeholder="例如：JP_5GB_7D">
+                        <p id="modalPlanCodeError" class="field-error"></p>
+                        <p class="field-hint">填入 Cyberbiz 後台這個商品的方案代碼，系統會依照客人買的方案自動比對套用。</p>
                     </div>
+                    <div class="modal-step">
+                        <div class="step-label"><span class="step-num">2</span> 幫這個樣板取個名字</div>
+                        <input type="text" id="modalProductName" placeholder="例如：日本 5GB 7天方案">
+                        <p class="field-hint">只有你們後台看得到，不會出現在客人收到的信裡。</p>
+                    </div>
+                    <div class="modal-step">
+                        <div class="step-label"><span class="step-num">3</span> 客人收到的信件標題</div>
+                        <div id="modalSubjectEditable" class="locked-editable" contenteditable="true"></div>
+                        <p class="field-hint">灰色的字會自動換成客人買的產品名稱和實際張數，不用改也改不掉，你只要調整前後的文字。</p>
+                    </div>
+
+                    <div class="modal-step">
+                        <div class="step-label"><span class="step-num">4</span> 信件內容（產品專屬說明）</div>
+                        <div id="modalEditor" style="height:150px;"></div>
+                        <p class="field-hint">灰色的字會自動換成產品名稱，安裝步驟、QR code、客服 LINE 已經自動加在信件開頭結尾，這裡只需寫這個產品的專屬提醒。</p>
+                    </div>
+                    
                     <p id="modalError"></p>
                     <div class="modal-actions">
                         <button onclick="saveModal()">儲存</button>
