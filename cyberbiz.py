@@ -41,7 +41,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 
-AUTO_VENDOR = ["AUTO001", "AUTO002", "AUTO003", "AUTO004"]
+AUTO_VENDOR = ["AUTO001", "AUTO002", "AUTO003", "AUTO004", "AUTO005"]
 APP_ID = os.environ.get("APP_ID")
 APP_SECRET = os.environ.get("APP_SECRET")
 CYBERBIZ_USERNAME = os.environ.get("CYBERBIZ_USERNAME")
@@ -52,6 +52,7 @@ VENDOR3_CUSTOMER_CODE = os.environ.get("VENDOR3_CUSTOMER_CODE")
 VENDOR3_CUSTOMER_AUTH = os.environ.get("VENDOR3_CUSTOMER_AUTH") 
 VENDOR4_AccessSecret=os.environ.get("VENDOR4_AccessSecret") 
 VENDOR4_Access_Key=os.environ.get("Access_Key") 
+WUGELINEBOT_API_KEY=os.environ.get("WUGELINEBOT_API_KEY")
 
 
 def requires_auth(f):
@@ -262,13 +263,16 @@ def cyberbiz_order():
                 JOYTEL_order_esim(order_id_, sku_, email_, trans_id_, close_id_)
             elif qc_ == "AUTO004":
                 Diysim_order_esim(order_id_, sku_, email_, trans_id_, close_id_)
+            elif qc_ == "AUTO005":
+                wugelinebot_order_esim(order_id_, sku_, email_, trans_id_, close_id_)
 
         return jsonify({"status": "ok"})
 
 
 # RSP的訂購esim api
 Base_URL = "https://neware.biz"
-
+#AUTO005的BASE URL
+WugaLineBot_BASE_URL="https://wugelinebot.vercel.app"
 
 def order_esim(order_id, planCode, email, trans_id, order_id_for_close_cyberbiz):
     RSP_SUBSCRIBE_API = f"{Base_URL}/openapi/esim/plan/subscribe"
@@ -928,6 +932,106 @@ def Diysim_notify_esim():
             logging.info(f"line_items_id={line_items_id} 尚有 {remaining_in_item} 筆未完成，等待中")
     return jsonify({"code": "0", "mesg": "Success"})
 
+def wugelinebot_order_esim(order_id, planCode, email, trans_id, order_id_for_close_cyberbiz):
+    url = f"{WugaLineBot_BASE_URL}/api/partner/v1/esim/fulfill"
+    headers = {
+        "Authorization": f"Bearer {WUGELINEBOT_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "planCode": planCode,
+        "externalOrderRef": trans_id,
+        "quantity": 1,
+        "qrcodeType": 1
+    }
+
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE orders SET status = 'processing' WHERE Trans_id = ? AND status IN ('pending', 'Failed')",
+            (trans_id,)
+        )
+        conn.commit()
+
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        result = response.json()
+
+        if result.get("code") == "000":
+            items = result.get("data", {}).get("items") or []
+            if not items:
+                error_msg = "WugaLineBot 回應成功但 items 為空，未取得 LPA"
+                logging.error(f"WugaLineBot 回應成功但 items 為空 trans_id={trans_id}")
+                with sqlite3.connect(DB_PATH, timeout=30) as conn:
+                        cursor = conn.cursor()
+                        cursor.execute(
+                            "UPDATE orders SET status = 'Failed', NOTE = ? WHERE Trans_id = ? AND status = 'processing'",
+                            (error_msg, trans_id)
+                        )
+                        conn.commit()
+                return
+            lpa = items[0]["qrcode"]
+            qrcode_img = generate_qrcode(lpa)
+            logging.info(f"WugaLineBot 訂購成功 order_id={order_id} planCode={planCode} trans_id={trans_id}")
+
+            with sqlite3.connect(DB_PATH, timeout=30) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE orders SET status='completed', qrcode=? WHERE Trans_id=?",
+                    (qrcode_img, trans_id)
+                )
+                conn.commit()
+
+                # 依 line_items_id 判斷該商品項目是否全部完成，全部完成才合併寄信
+                cursor.execute("""
+                    SELECT email, Title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id, PlanCode
+                    FROM orders WHERE Trans_id = ?
+                """, (trans_id,))
+                row = cursor.fetchone()
+                if row:
+                    email_, full_title, order_id_, qty_index, close_id_, line_items_id, PlanCode = row
+
+                    cursor.execute("""
+                        SELECT COUNT(*) FROM orders
+                        WHERE order_id = ? AND line_items_id = ? AND status != 'completed'
+                    """, (order_id_, line_items_id))
+                    remaining_in_item = cursor.fetchone()[0]
+
+                    if remaining_in_item == 0:
+                        cursor.execute("""
+                            SELECT qrcode FROM orders
+                            WHERE order_id = ? AND line_items_id = ?
+                            ORDER BY qty_index ASC
+                        """, (order_id_, line_items_id))
+                        qrcode_list = [r[0] for r in cursor.fetchall()]
+                        logging.info(f"line_items_id={line_items_id} 全部完成，寄送含 {len(qrcode_list)} 張 QR code 的信")
+                        send_order_email(email_, qrcode_list, full_title, PlanCode=PlanCode)
+                    else:
+                        logging.info(f"line_items_id={line_items_id} 尚有 {remaining_in_item} 筆未完成，等待中")
+
+            logging.info(f"訂購esim完成 order_id={order_id} trans_id={trans_id}")
+            check_and_close_order(order_id, order_id_for_close_cyberbiz)
+
+        else:
+            error_msg = f"code={result.get('code')}: {response.text}"[:200]
+            logging.error(f"WugaLineBot 訂購失敗 order_id={order_id} planCode={planCode} trans_id={trans_id} {error_msg}")
+            with sqlite3.connect(DB_PATH, timeout=30) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE orders SET status = 'pending', NOTE = ? WHERE Trans_id = ? AND status != 'completed'",
+                    (error_msg, trans_id,)
+                )
+                conn.commit()
+
+    except Exception as e:
+        logging.error(f"呼叫供應商API失敗: {e}")
+        with sqlite3.connect(DB_PATH, timeout=30) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE orders SET status = 'pending' WHERE Trans_id = ? AND status = 'processing'",
+                (trans_id,)
+            )
+            conn.commit()
 
 def add_text_to_QRcode(qrcode_url, product_name, cid=None):
     if isinstance(qrcode_url, bytes):
@@ -1715,6 +1819,8 @@ def retry(trans_id):
         t = threading.Thread(target=JOYTEL_order_esim, args=(order_id, plan_code, email, trans_id, close_id))
     elif qc == "AUTO004":
         t = threading.Thread(target=Diysim_order_esim, args=(order_id, plan_code, email, trans_id, close_id))
+    elif qc == "AUTO005":
+            t = threading.Thread(target=wugelinebot_order_esim, args=(order_id, plan_code, email, trans_id, close_id))
     else:
         return jsonify({"error": f"未知廠商 {qc}"})
 

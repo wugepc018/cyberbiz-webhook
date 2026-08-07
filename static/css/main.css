@@ -540,3 +540,49 @@ tbody tr:hover td{background:#f8fbff;}
 .status-badge.processing{background:#dbeafe;color:#2563eb;}
 .status-badge.pending{background:#f3f4f6;color:#9ca3af;}
 .status-badge.Failed{background:#fee2e2;color:#dc2626;}
+
+.modal-step {
+    margin-bottom: 20px;
+}
+.step-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+.step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #555e7a;
+    color: #fff;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+.field-hint {
+    font-size: 12px;
+    color: #888;
+    margin-top: 4px;
+    line-height: 1.5;
+}
+.modal-advanced {
+    margin: 16px 0;
+    padding: 10px 12px;
+    background: #f7f8fa;
+    border-radius: 6px;
+}
+.modal-advanced summary {
+    cursor: pointer;
+    font-size: 13px;
+    color: #555e7a;
+    font-weight: 500;
+}
+.modal-advanced label {
+    display: block;
+    margin-top: 10px;
+    font-size: 13px;
+}
