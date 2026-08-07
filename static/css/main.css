@@ -628,3 +628,13 @@ tbody tr:hover td{background:#f8fbff;}
     font-weight:500;
     user-select:none;
 }
+.sidebar .tab-btn{
+    display:flex;
+    align-items:center;
+    gap:10px;
+}
+.sidebar .tab-btn svg{
+    width:18px;
+    height:18px;
+    flex-shrink:0;
+}
