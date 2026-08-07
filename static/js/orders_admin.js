@@ -216,3 +216,6 @@ function saveModal() {
             document.getElementById('modalError').innerText = '網路錯誤：' + err;
         });
 }
+function toggleNote(el) {
+    el.classList.toggle('expanded');
+}

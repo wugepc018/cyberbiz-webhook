@@ -586,3 +586,24 @@ tbody tr:hover td{background:#f8fbff;}
     margin-top: 10px;
     font-size: 13px;
 }
+/* ---------- 備註欄位：預設單行截斷，點擊展開完整內容 ---------- */
+.orders-table td.note-cell{
+    max-width:140px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    word-break:normal;
+    cursor:pointer;
+}
+
+.orders-table td.note-cell.expanded{
+    max-width:400px;
+    white-space:normal;
+    overflow:visible;
+    text-overflow:clip;
+    word-break:break-word;
+    background:#fffbea;
+    cursor:zoom-out;
+    position:relative;
+    z-index:1;
+}

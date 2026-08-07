@@ -210,7 +210,7 @@
                         <span class="status-badge {{ row.status }}">{{ row.status }}</span>
                     </td>
 
-                    <td>{{ row.note }}</td>
+                    <td class="note-cell" onclick="toggleNote(this)">{{ row.note }}</td>
                 </tr>
                 {% endfor %}
             </table>
