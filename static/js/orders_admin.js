@@ -54,7 +54,8 @@ function toggleAdvanced() {
 document.addEventListener('DOMContentLoaded', function () {
     var saved = null;
     try { saved = localStorage.getItem('activeTab'); } catch (e) {}
-    switchTab(saved === 'templates' ? 'templates' : 'orders');
+    var validTabs = ['orders', 'templates', 'vendors'];
+    switchTab(validTabs.includes(saved) ? saved : 'orders');
 
     // 若進階篩選欄位本來就有值（帶著查詢條件重新整理），自動展開
     var advancedFilters = document.getElementById('advancedFilters');

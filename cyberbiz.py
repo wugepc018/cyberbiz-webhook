@@ -1283,6 +1283,9 @@ def orders():
     page = int(request.args.get("page", 1))
     per_page = 20
 
+    vendor_date_from = request.args.get("vendor_date_from")
+    vendor_date_to = request.args.get("vendor_date_to")
+    
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
         cursor = conn.cursor()
         sql = """
@@ -1347,6 +1350,28 @@ def orders():
             ORDER BY (PlanCode != 'default'), PlanCode
         """)
         template_rows_raw = cursor.fetchall()
+        vendor_sql = """
+            SELECT
+                qc,
+                COUNT(*) AS total,
+                SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) AS completed,
+                SUM(CASE WHEN status='Failed' THEN 1 ELSE 0 END) AS failed,
+                SUM(CASE WHEN status IN ('pending','processing') THEN 1 ELSE 0 END) AS in_progress,
+                SUM(PRICE) AS total_amount
+            FROM orders
+            WHERE qc IS NOT NULL
+        """
+        vendor_params = []
+        if vendor_date_from:
+            vendor_sql += " AND Created_AT >= ?"
+            vendor_params.append(vendor_date_from)
+        if vendor_date_to:
+            vendor_sql += " AND Created_AT <= ?"
+            vendor_params.append(vendor_date_to + "T23:59:59")
+        vendor_sql += " GROUP BY qc ORDER BY total DESC"
+
+        cursor.execute(vendor_sql, vendor_params)
+        vendor_rows_raw = cursor.fetchall()
 
     rows = [
         {
@@ -1365,6 +1390,26 @@ def orders():
             "subject": subject or "",
             "intro_note": intro_note or "",
         }
+    vendor_names = {
+        "AUTO001": "RSP",
+        "AUTO002": "FTC",
+        "AUTO003": "JOYTEL",
+        "AUTO004": "Diysim",
+        "AUTO005": "WugaLineBot",
+    }
+    vendor_report = []
+    for qc, v_total, completed, failed, in_progress, v_amount in vendor_rows_raw:
+        success_rate = round(completed / v_total * 100, 1) if v_total else 0
+        vendor_report.append({
+            "qc": qc,
+            "name": vendor_names.get(qc, qc),
+            "total": v_total,
+            "completed": completed,
+            "failed": failed,
+            "in_progress": in_progress,
+            "success_rate": success_rate,
+            "total_amount": v_amount or 0,
+        })
 
     def build_url(p):
         args = {

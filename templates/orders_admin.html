@@ -37,6 +37,13 @@
                 ✉️ Email 樣板管理
             </button>
 
+            <button type="button" 
+                    class="tab-btn" 
+                    id="tabbtn-vendors" 
+                    onclick="switchTab('vendors')">
+                📊 供應商報表
+            </button>
+
         </div>
 
     </div>
@@ -318,6 +325,55 @@
             </div><!-- /.card (樣板) -->
 
         </div><!-- /#panel-templates -->
+        <!-- =================== 供應商報表 =================== -->
+        <div class="tab-panel" id="panel-vendors">
+
+            <div class="card">
+
+                <div class="panel-header">
+                    <h2>供應商報表</h2>
+                </div>
+
+                <form method="get" action="/orders" class="filter-form">
+                    <div class="search-row">
+                        <input type="date" name="vendor_date_from" value="{{ vendor_date_from or '' }}">
+                        <span>～</span>
+                        <input type="date" name="vendor_date_to" value="{{ vendor_date_to or '' }}">
+                        <button type="submit"><i data-lucide="search"></i> 篩選</button>
+                        <a href="/orders" class="btn-link cancel">清除</a>
+                    </div>
+                </form>
+
+                <table class="orders-table" style="min-width:760px;">
+                    <tr>
+                        <th>廠商</th>
+                        <th>總訂單數</th>
+                        <th>已完成</th>
+                        <th>失敗</th>
+                        <th>處理中</th>
+                        <th>成功率</th>
+                        <th>總金額</th>
+                    </tr>
+                    {% for v in vendor_report %}
+                    <tr>
+                        <td class="code">{{ v.name }}（{{ v.qc }}）</td>
+                        <td>{{ v.total }}</td>
+                        <td>{{ v.completed }}</td>
+                        <td>{{ v.failed }}</td>
+                        <td>{{ v.in_progress }}</td>
+                        <td>
+                            <span class="status-badge {{ 'completed' if v.success_rate >= 90 else ('pending' if v.success_rate >= 70 else 'Failed') }}">
+                                {{ v.success_rate }}%
+                            </span>
+                        </td>
+                        <td class="code amount-cell">${{ v.total_amount }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+
+            </div><!-- /.card (供應商報表) -->
+
+</div><!-- /#panel-vendors -->
 
     </div><!-- /.content-area -->
 
