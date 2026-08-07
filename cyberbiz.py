@@ -1438,6 +1438,8 @@ def orders():
         page=page, total=total, total_pages=total_pages, total_amount=total_amount,
         build_url=build_url,
         download_report_url=download_report_url,
+        vendor_report=vendor_report,
+        vendor_date_from=vendor_date_from, vendor_date_to=vendor_date_to,
     )
 
 
