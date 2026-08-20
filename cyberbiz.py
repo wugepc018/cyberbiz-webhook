@@ -90,7 +90,9 @@ def init_db():
         USE_DATE INTEGER,
         MOBILE_NUMBER INTEGER,
         CUSTOMER_NAME TEXT,
-        BUSINESSN TEXT
+        BUSINESSN TEXT,
+        JOYTEL_orderCode TEXT,
+        JOYTEL_orderTid TEXT
         )
         """)
         cursor.execute("PRAGMA table_info(orders)")
@@ -114,6 +116,10 @@ def init_db():
             cursor.execute("ALTER TABLE orders ADD COLUMN BUSINESSN TEXT")
         if "PlanCode" not in columns:
             cursor.execute("ALTER TABLE orders ADD COLUMN PlanCode TEXT")
+        if "JOYTEL_orderCode" not in columns:
+            cursor.execute("ALTER TABLE orders ADD COLUMN JOYTEL_orderCode TEXT")
+        if "JOYTEL_orderTid" not in columns:
+            cursor.execute("ALTER TABLE orders ADD COLUMN JOYTEL_orderTid TEXT")
 
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS CID_TABLE (
@@ -121,6 +127,11 @@ def init_db():
             Trans_id TEXT
         )
         """)
+        cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS uniq_order_item_qty
+        ON orders (order_id, line_items_id, qty_index)
+        """)
+
         conn.commit()
 
 
@@ -180,6 +191,7 @@ def cyberbiz_order():
     logging.info(f"客戶email: {email}")
 
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        conn.execute("BEGIN IMMEDIATE")
         cursor = conn.cursor()
         line_items = data.get("line_items", [])
         tasks = []
@@ -240,7 +252,7 @@ def cyberbiz_order():
                     today = datetime.datetime.now()  # 日期寫死
                     use_date = int(today.timestamp())
                     cursor.execute(
-                        """INSERT INTO orders
+                        """INSERT OR IGNORE INTO orders
                             (order_id, Created_AT, Trans_id, PlanCode, email, product_id, qc,
                             status, qrcode, Title, qty_index, QUANTITY, order_id_for_close_cyberbiz,
                             NOTE, line_items_id, PRICE, USE_DATE, MOBILE_NUMBER, CUSTOMER_NAME, BUSINESSN)
@@ -249,24 +261,33 @@ def cyberbiz_order():
                          "pending", None, full_title, qty_index, quantity, order_id_for_close_cyberbiz,
                          note, line_items_id, price, use_date, mobile_number, Customer_name, None)
                     )
-                    tasks.append((order_id, sku, email, trans_id, order_id_for_close_cyberbiz, qc))
+                    if cursor.rowcount > 0:
+                        tasks.append((order_id, sku, email, trans_id, order_id_for_close_cyberbiz, qc))
+                    else:
+                        logging.warning(f"重複插入被擋下: order_id={order_id} line_items_id={line_items_id} qty_index={qty_index}")
 
             conn.commit()
+    # 插入完就馬上回應 Cyberbiz,不等 vendor API
+    t = threading.Thread(target=dispatch_tasks, args=(tasks,))
+    t.daemon = True
+    t.start()
+    return jsonify({"status": "ok"})
 
-        for task in tasks:
-            order_id_, sku_, email_, trans_id_, close_id_, qc_ = task
-            if qc_ == "AUTO001":
-                order_esim(order_id_, sku_, email_, trans_id_, close_id_)
-            elif qc_ == "AUTO002":
-                FTC_order_esim(order_id_, sku_, email_, trans_id_, close_id_)
-            elif qc_ == "AUTO003":
-                JOYTEL_order_esim(order_id_, sku_, email_, trans_id_, close_id_)
-            elif qc_ == "AUTO004":
-                Diysim_order_esim(order_id_, sku_, email_, trans_id_, close_id_)
-            elif qc_ == "AUTO005":
-                wugelinebot_order_esim(order_id_, sku_, email_, trans_id_, close_id_)
+def dispatch_tasks(tasks):
+    for task in tasks:
+        order_id_, sku_, email_, trans_id_, close_id_, qc_ = task
+        if qc_ == "AUTO001":
+            order_esim(order_id_, sku_, email_, trans_id_, close_id_)
+        elif qc_ == "AUTO002":
+            FTC_order_esim(order_id_, sku_, email_, trans_id_, close_id_)
+        elif qc_ == "AUTO003":
+            JOYTEL_order_esim(order_id_, sku_, email_, trans_id_, close_id_)
+        elif qc_ == "AUTO004":
+            Diysim_order_esim(order_id_, sku_, email_, trans_id_, close_id_)
+        elif qc_ == "AUTO005":
+            wugelinebot_order_esim(order_id_, sku_, email_, trans_id_, close_id_)
 
-        return jsonify({"status": "ok"})
+    
 
 
 # RSP的訂購esim api
@@ -286,7 +307,12 @@ def order_esim(order_id, planCode, email, trans_id, order_id_for_close_cyberbiz)
             "UPDATE orders SET status = 'processing' WHERE Trans_id = ? AND status IN ('pending', 'Failed')",
             (trans_id,)
         )
+        if cursor.rowcount == 0:
+            logging.info(f"trans_id={trans_id} 已經在 processing/completed，跳過重複送出")
+            conn.commit()
+            return
         conn.commit()
+        
 
     payload = {"planCode": planCode, "qrcodeType": 0, "email": email}
     headers = {
@@ -379,6 +405,10 @@ def Diysim_order_esim(order_id, planCode, email, trans_id, order_id_for_close_cy
                     "UPDATE orders SET status = 'processing', BUSINESSN = ? WHERE Trans_id = ? AND status = 'processing'",
                     (businessSn, trans_id)
                 )
+                if cursor.rowcount == 0:
+                    logging.info(f"trans_id={trans_id} 已經在 processing/completed，跳過重複送出")
+                    conn.commit()
+                    return
                 conn.commit()
 
         elif response.json().get("code") == 5:
@@ -415,20 +445,27 @@ def Diysim_order_esim(order_id, planCode, email, trans_id, order_id_for_close_cy
 def FTC_order_esim(order_id, planCode, email, trans_id, order_id_for_close_cyberbiz):
     FTC_SUBSCRIBE_API = "https://zdfjzyhdcl.execute-api.ap-northeast-1.amazonaws.com/prod/v1/create"
     timestamp = str(int(time.time()))
-
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT MOBILE_NUMBER, CUSTOMER_NAME, USE_DATE FROM orders WHERE Trans_id = ? AND status = 'pending'",
+            "UPDATE orders SET status = 'processing' WHERE Trans_id = ? AND status = 'pending'",
+            (trans_id,)
+        )
+        if cursor.rowcount == 0:
+            logging.info(f"trans_id={trans_id} 已經在 processing/completed，跳過重複送出")
+            conn.commit()
+            return
+        cursor.execute(
+            "SELECT MOBILE_NUMBER, CUSTOMER_NAME, USE_DATE FROM orders WHERE Trans_id = ?",
             (trans_id,)
         )
         row = cursor.fetchone()
-        if not row:
-            logging.error(f"找不到 trans_id={trans_id}")
-            return
-
-        mobile_number, customer_name, selectDate = row
         conn.commit()
+
+    if not row:
+        logging.error(f"找不到 trans_id={trans_id}")
+        return
+    mobile_number, customer_name, selectDate = row
 
     payload = {
         "type": "esim",
@@ -452,15 +489,6 @@ def FTC_order_esim(order_id, planCode, email, trans_id, order_id_for_close_cyber
 
         if response.json().get("code") == "200":
             logging.info(f"訂購請求成功 order_id={order_id} planCode={planCode} trans_id={trans_id}")
-
-            with sqlite3.connect(DB_PATH, timeout=30) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "UPDATE orders SET status = 'processing' WHERE Trans_id = ?",
-                    (trans_id,)
-                )
-                conn.commit()
-
             t = threading.Thread(target=poll_lpa, args=(trans_id, order_id_for_close_cyberbiz))
             t.daemon = True
             t.start()
@@ -574,22 +602,31 @@ def poll_lpa(trans_id, order_id_for_close_cyberbiz):
         break
 
 
-def JOYTEL_order_esim(order_id, planCode, email, trans_id, order_id_for_close_cyberbiz, retry_count=0):
+def JOYTEL_order_esim(order_id, planCode, email, trans_id, order_id_for_close_cyberbiz, retry_count=0, orderTid=None):
     JOYTEL_SUBSCRIBE_API = "https://api.joytel.vip/v2/customerApi/customerOrder"
     timestamp = int(int(time.time() * 1000))
     MAX_RETRY = 3
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
         cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE orders SET status = 'processing' WHERE Trans_id = ? AND status IN ('pending', 'Failed')",
+            (trans_id,)
+        )
+        if cursor.rowcount == 0 and retry_count == 0:
+            logging.info(f"trans_id={trans_id} 已經在 processing/completed，跳過重複送出")
+            conn.commit()
+            return
         cursor.execute("SELECT CUSTOMER_NAME, MOBILE_NUMBER FROM orders WHERE Trans_id = ?", (trans_id,))
         row = cursor.fetchone()
-        if not row:
-            logging.error(f"找不到 trans_id={trans_id}，JOYTEL 訂購中止")
-            return
-        customer_name, mobile_number = row
-
-    now_str = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-    random_6 = str(random.randint(100000, 999999))
-    orderTid = str(VENDOR3_CUSTOMER_CODE) + now_str + random_6
+        conn.commit()
+    if not row:
+        logging.error(f"找不到 trans_id={trans_id}，JOYTEL 訂購中止")
+        return
+    customer_name, mobile_number = row
+    if orderTid is None:
+        now_str = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        random_6 = str(random.randint(100000, 999999))
+        orderTid = str(VENDOR3_CUSTOMER_CODE) + now_str + random_6
 
     item_list = [{"productCode": planCode, "quantity": 1}]
     autoGraph = generate_vendor3_sign(VENDOR3_CUSTOMER_CODE, VENDOR3_CUSTOMER_AUTH, 5, orderTid, customer_name, mobile_number, timestamp, item_list)
@@ -611,15 +648,15 @@ def JOYTEL_order_esim(order_id, planCode, email, trans_id, order_id_for_close_cy
 
         if response.json().get("code") == 0:
             logging.info(f"訂購請求成功 order_id={order_id} planCode={planCode} trans_id={trans_id}")
+            orderCode = response.json().get("data").get("orderCode")
+            orderTid = response.json().get("data").get("orderTid")
             with sqlite3.connect(DB_PATH, timeout=30) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "UPDATE orders SET status = 'processing' WHERE Trans_id = ?",
-                    (trans_id,)
+                    "UPDATE orders SET status = 'processing', JOYTEL_orderCode = ?, JOYTEL_orderTid = ? WHERE Trans_id = ?",
+                    (orderCode, orderTid, trans_id)
                 )
                 conn.commit()
-            orderCode = response.json().get("data").get("orderCode")
-            orderTid = response.json().get("data").get("orderTid")
             t = threading.Thread(target=poll_joytel, args=(trans_id, orderTid, order_id_for_close_cyberbiz, orderCode))
             t.daemon = True
             t.start()
@@ -639,7 +676,7 @@ def JOYTEL_order_esim(order_id, planCode, email, trans_id, order_id_for_close_cy
         if retry_count < MAX_RETRY:
             logging.info(f"JOYTEL timeout，30秒後第{retry_count+1}次重試 trans_id={trans_id}")
             time.sleep(30)
-            t = threading.Thread(target=JOYTEL_order_esim, args=(order_id, planCode, email, trans_id, order_id_for_close_cyberbiz, retry_count+1))
+            t = threading.Thread(target=JOYTEL_order_esim, args=(order_id, planCode, email, trans_id, order_id_for_close_cyberbiz, retry_count+1, orderTid))
             t.daemon = True
             t.start()
         else:
@@ -718,68 +755,78 @@ def JOYEL_query_QrCode(orderCode, orderTid):
     except Exception as e:
         logging.error(f"JOYTEL 查詢失敗: {e}")
         return None
-
+    
+_active_joytel_polls = set()
+_active_joytel_polls_lock = threading.Lock()
 
 def poll_joytel(trans_id, orderTid, order_id_for_close_cyberbiz, orderCode):
-    for i in range(288):
-        result = JOYEL_query_QrCode(orderCode, orderTid)
+    with _active_joytel_polls_lock:
+        if trans_id in _active_joytel_polls:
+            logging.info(f"trans_id={trans_id} 已有 JOYTEL 輪詢在進行中，略過")
+            return
+        _active_joytel_polls.add(trans_id)
+    try:
+        for i in range(288):
+            result = JOYEL_query_QrCode(orderCode, orderTid)
 
-        if not result:
-            logging.info(f"第{i+1}次查詢 JOYTEL，尚未完成，sleep 300s")
-            time.sleep(300)
-            continue
+            if not result:
+                logging.info(f"第{i+1}次查詢 JOYTEL，尚未完成，sleep 300s")
+                time.sleep(300)
+                continue
 
-        qr_code, sn_code = result
-        qrcode_img = generate_qrcode(qr_code)
+            qr_code, sn_code = result
+            qrcode_img = generate_qrcode(qr_code)
 
-        with sqlite3.connect(DB_PATH, timeout=30) as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT email, Title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id, PlanCode
-                FROM orders WHERE Trans_id = ? AND status = 'processing'
-            """, (trans_id,))
-            row = cursor.fetchone()
-            if not row:
-                logging.error(f"找不到 processing 訂單 {trans_id}")
-                return
-            email, full_title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id, PlanCode = row
+            with sqlite3.connect(DB_PATH, timeout=30) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT email, Title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id, PlanCode
+                    FROM orders WHERE Trans_id = ? AND status = 'processing'
+                """, (trans_id,))
+                row = cursor.fetchone()
+                if not row:
+                    logging.error(f"找不到 processing 訂單 {trans_id}")
+                    return
+                email, full_title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id, PlanCode = row
 
-            cursor.execute("INSERT INTO CID_TABLE (CID, Trans_id) VALUES (?, ?)", (sn_code, trans_id))
-            cursor.execute("UPDATE orders SET status='completed', qrcode=? WHERE Trans_id=?", (qrcode_img, trans_id))
-            conn.commit()
+                cursor.execute("INSERT INTO CID_TABLE (CID, Trans_id) VALUES (?, ?)", (sn_code, trans_id))
+                cursor.execute("UPDATE orders SET status='completed', qrcode=? WHERE Trans_id=?", (qrcode_img, trans_id))
+                conn.commit()
 
-            logging.info(f"JOYTEL 單張完成 trans_id={trans_id} sn_code={sn_code}")
-            cursor.execute("""
-                SELECT COUNT(*) FROM orders
-                WHERE order_id = ? AND line_items_id = ? AND status != 'completed'
-            """, (order_id, line_items_id))
-            remaining = cursor.fetchone()[0]
-
-            if remaining == 0:
-                cursor.execute("""SELECT qrcode, qty_index, Trans_id FROM orders
-                    WHERE order_id = ? AND line_items_id = ?
-                    ORDER BY qty_index ASC
+                logging.info(f"JOYTEL 單張完成 trans_id={trans_id} sn_code={sn_code}")
+                cursor.execute("""
+                    SELECT COUNT(*) FROM orders
+                    WHERE order_id = ? AND line_items_id = ? AND status != 'completed'
                 """, (order_id, line_items_id))
+                remaining = cursor.fetchone()[0]
 
-                qrcode_rows = cursor.fetchall()
-                qrcode_list = [r[0] for r in qrcode_rows]
-                trans_id_list = [r[2] for r in qrcode_rows]
+                if remaining == 0:
+                    cursor.execute("""SELECT qrcode, qty_index, Trans_id FROM orders
+                        WHERE order_id = ? AND line_items_id = ?
+                        ORDER BY qty_index ASC
+                    """, (order_id, line_items_id))
 
-                cid_list = []
-                for tid in trans_id_list:
-                    cursor.execute("SELECT CID FROM CID_TABLE WHERE Trans_id = ?", (tid,))
-                    cid_row = cursor.fetchone()
-                    cid_list.append(cid_row[0] if cid_row else None)
+                    qrcode_rows = cursor.fetchall()
+                    qrcode_list = [r[0] for r in qrcode_rows]
+                    trans_id_list = [r[2] for r in qrcode_rows]
 
-                logging.info(f"line_items_id={line_items_id} 全部完成，寄送含 {len(qrcode_list)} 張 QR code 的信")
-                send_order_email(email, qrcode_list, full_title, PlanCode=PlanCode, cid_list=cid_list)
-            else:
-                logging.info(f"line_items_id={line_items_id} 尚有 {remaining} 筆未完成，等待中")
+                    cid_list = []
+                    for tid in trans_id_list:
+                        cursor.execute("SELECT CID FROM CID_TABLE WHERE Trans_id = ?", (tid,))
+                        cid_row = cursor.fetchone()
+                        cid_list.append(cid_row[0] if cid_row else None)
 
-        logging.info(f"訂購esim完成 order_id={order_id} trans_id={trans_id}")
-        check_and_close_order(order_id, order_id_for_close_cyberbiz)
-        break
+                    logging.info(f"line_items_id={line_items_id} 全部完成，寄送含 {len(qrcode_list)} 張 QR code 的信")
+                    send_order_email(email, qrcode_list, full_title, PlanCode=PlanCode, cid_list=cid_list)
+                else:
+                    logging.info(f"line_items_id={line_items_id} 尚有 {remaining} 筆未完成，等待中")
 
+            logging.info(f"訂購esim完成 order_id={order_id} trans_id={trans_id}")
+            check_and_close_order(order_id, order_id_for_close_cyberbiz)
+            break
+    finally:
+        with _active_joytel_polls_lock:
+            _active_joytel_polls.discard(trans_id)
 
 def generate_qrcode(qrcodes_lpa):
     img = qrcode.make(qrcodes_lpa)
@@ -951,6 +998,10 @@ def wugelinebot_order_esim(order_id, planCode, email, trans_id, order_id_for_clo
             "UPDATE orders SET status = 'processing' WHERE Trans_id = ? AND status IN ('pending', 'Failed')",
             (trans_id,)
         )
+        if cursor.rowcount == 0:
+            logging.info(f"trans_id={trans_id} 已經在 processing/completed，跳過重複送出")
+            conn.commit()
+            return
         conn.commit()
 
     try:
@@ -1071,12 +1122,11 @@ def add_text_to_QRcode(qrcode_url, product_name, cid=None):
 
     return img_byte.read()
 
-
 def send_order_email(to_email, qrcode_url_list, product_name, PlanCode=None, cid_list=None):
-    from_email = "wuge.esim@gmail.com"
+    from_email = "wuge.esim@wuge.com.tw"
     app_password = os.environ.get("GMAIL_PASSWORD")
-    #pdf_path = "/root/app/cyberbiz-webhook/2026年版 ESIM 設定.pdf"
-    pdf_path = os.path.join(os.path.dirname(__file__), "2026年版 ESIM 設定.pdf")
+    #pdf_path = "/root/app/cyberbiz-webhook/2026年版 eSIM iphone 設定.pdf"
+    pdf_path = os.path.join(os.path.dirname(__file__), "2026年版 eSIM iphone 設定.pdf")
     try:
         server = smtplib.SMTP("smtp.gmail.com", 587)
         server.starttls()
@@ -1898,7 +1948,42 @@ def retry_poll(trans_id):
 
     return jsonify({"status": "ok", "message": f"已重新觸發 poll_lpa，trans_id={trans_id}"})
 
+@app.route("/retry_poll_joytel/<trans_id>")
+def retry_poll_joytel(trans_id):
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT qc, status, order_id_for_close_cyberbiz, JOYTEL_orderCode, JOYTEL_orderTid
+            FROM orders WHERE Trans_id = ?
+        """, (trans_id,))
+        row = cursor.fetchone()
 
+    if not row:
+        return jsonify({"error": "找不到這個 trans_id"})
+
+    qc, status, close_id, orderCode, orderTid = row
+
+    if qc != "AUTO003":
+        return jsonify({"error": f"此訂單廠商為 {qc}，不是 AUTO003/JOYTEL"})
+    if status != "processing":
+        return jsonify({"error": f"目前狀態為 {status}，不是 processing，不需要重新輪詢"})
+    if not orderCode or not orderTid:
+        return jsonify({"error": "找不到 orderCode/orderTid（可能是舊資料，欄位加入前下的單），無法接續查詢，只能用 /retry 重新下單"})
+
+    with _active_joytel_polls_lock:
+        if trans_id in _active_joytel_polls:
+            return jsonify({"error": "此 trans_id 已有輪詢在進行中，請稍後再試"})
+
+    t = threading.Thread(target=poll_joytel, args=(trans_id, orderTid, close_id, orderCode))
+    t.daemon = True
+    t.start()
+
+    return jsonify({
+        "status": "ok",
+        "message": f"已重新觸發 JOYTEL 輪詢，trans_id={trans_id} orderCode={orderCode}",
+        "note": "此操作只查詢現有訂單狀態，不會重新下單"
+    })
+    
 # 手動查一次 AUTO002(FTC) 的 esim 資訊，不啟動長輪詢、不寫資料庫，純粹看供應商目前回什麼
 @app.route("/manual_query_ftc/<trans_id>")
 def manual_query_ftc(trans_id):
