@@ -439,6 +439,14 @@ def Diysim_order_esim(order_id, planCode, email, trans_id, order_id_for_close_cy
 
     except Exception as e:
         logging.error(f"呼叫供應商API失敗: {e}")
+        error_msg = f"連線例外: {e}"[:200]
+        with sqlite3.connect(DB_PATH, timeout=30) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE orders SET status = 'Failed', NOTE = ? WHERE Trans_id = ? AND status = 'processing'",
+                (error_msg, trans_id)
+            )
+            conn.commit()
 
 
 # FTC的訂購esim api
