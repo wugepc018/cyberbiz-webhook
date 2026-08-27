@@ -31,7 +31,36 @@ load_dotenv(dotenv_path=os.path.join(BASE_DIR, ".env"))
 ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
 ADMIN_PASS = os.environ.get("ADMIN_PASS")
 DEFAULT_SUBJECT = "[[product_name]]（共[[count]]張）"
-DEFAULT_INTRO_NOTE = "<p>你好，以下是你的 [[product_name]] 安裝說明：</p>"
+DEFAULT_INTRO_NOTE = """<p>你好，以下是你的 [[product_name]]（共[[count]]張）：</p>
+
+<p>請於收到信件 <strong>90日內</strong> 透過 Wi-Fi 或行動上網來安裝完畢，逾期會失效。</p>
+
+<p>⚠️ 請記得一個 QR CODE 只能給<strong>一個手機</strong>掃描，被掃過就無法再給其他手機安裝了<br>
+安裝時請記得手機需<strong>連接網路</strong>，關掉<strong>飛航模式</strong></p>
+
+<p><strong>安裝方式(1)：</strong>打開手機的信箱，長按本信件下面的 CODE，會有一個加入ESIM 可以進行安裝</p>
+
+<p><strong>安裝方式(2)：</strong>將QR CODE 存到手機相簿後，如附件說明進入照相機圖庫安裝</p>
+
+<p><strong>安裝方式(3)：</strong>於 設定 &gt; 行動服務，點選加入ESIM，掃描 QR CODE 畫面安裝</p>
+
+<p>安裝後會在 設定 &gt; 行動服務 中間的SIM 出現<strong>啟用中</strong>的SIM卡，代表已經安裝進手機了。不用再重複掃描QR CODE。<br>
+由於台灣是非覆蓋國家，啟用中會比較久是正常現象，請勿擔心。<br>
+安裝完畢出現無法啟用也是因為人還在台灣在非覆蓋國家的關係，不用理會。</p>
+
+<p>安裝完成後到國外再做行動數據的切換，開啟<strong>數據漫遊</strong>使用<br>
+🚫 請勿移除ESIM，移除後就無法補發也無法再重新安裝<br>
+回國後再把ESIM 做刪除掉，避免下次使用ESIM混到舊的</p>
+
+<p>
+[[qrcode_blocks]]
+</p>
+
+<p>安裝使用有什麼問題，請洽我們 吳哥舖客服帳號【LINE ID】<strong>@uup3894y</strong><br>
+由於QR CODE 為數位複製品，無法做退換，還請多加注意</p>
+
+<p>謝謝你</p>
+"""
 LOG_PATH = os.environ.get("LOG_PATH", os.path.join(BASE_DIR, "webhook.log"))
 
 os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True) if os.path.dirname(LOG_PATH) else None
@@ -1272,10 +1301,16 @@ EMAIL_SHELL_FOOTER = """
 def render_email(PlanCode, product_name, count, qrcode_html_blocks):
     subject_tpl, intro_tpl = get_email_template(PlanCode)
     subject = substitute_placeholders(subject_tpl, product_name=product_name, count=count)
-    intro_html = substitute_placeholders(intro_tpl, product_name=product_name, count=count)
-    body_html = EMAIL_SHELL_HEADER + intro_html + EMAIL_SHELL_FOOTER.format(
-        qrcode_html_blocks=qrcode_html_blocks
-    )
+    body_content = substitute_placeholders(intro_tpl, product_name=product_name, count=count)
+
+    # 樣板內容裡用 [[qrcode_blocks]] 標記 QR code 要插入的位置
+    if "[[qrcode_blocks]]" in body_content:
+        body_content = body_content.replace("[[qrcode_blocks]]", qrcode_html_blocks)
+    else:
+        # 沒放標記的舊樣板，QR code 自動補在最後面，避免漏掉
+        body_content += f"<p>{qrcode_html_blocks}</p>"
+
+    body_html = EMAIL_SHELL_HEADER + body_content + "</body></html>"
     return subject, body_html
 
 
