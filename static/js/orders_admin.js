@@ -256,29 +256,60 @@ PlaceholderBlot.blotName = 'placeholder';
 PlaceholderBlot.tagName = 'span';
 Quill.register(PlaceholderBlot);
 
+// 用不可見的特殊字元包住 [[key]]，避免被 HTML parser 誤判成一般文字
+var PLACEHOLDER_MARK_OPEN = '\uE000';
+var PLACEHOLDER_MARK_CLOSE = '\uE001';
+
 function setEditorWithLockedPlaceholders(html) {
-    var parts = (html || '').split(/(\[\[\w+\]\])/g);
-    var delta = { ops: [] };
-    parts.forEach(function (part) {
-        var match = part.match(/^\[\[(\w+)\]\]$/);
-        if (match) {
-            delta.ops.push({ insert: { placeholder: match[1] } });
-        } else if (part) {
-            delta.ops.push({ insert: part });
+    // 先把 [[key]] 換成不會被 HTML parser 破壞的特殊標記字元
+    var marked = (html || '').replace(/\[\[(\w+)\]\]/g, function (m, key) {
+        return PLACEHOLDER_MARK_OPEN + key + PLACEHOLDER_MARK_CLOSE;
+    });
+
+    // 用 Quill 的 clipboard 功能「真的」把 HTML 解析進編輯器，
+    // 會正確產生 <p> <strong> <br> 等對應的排版格式，不再當純文字塞進去
+    quillModal.setText('');
+    quillModal.clipboard.dangerouslyPasteHTML(0, marked);
+
+    // 貼上後，把裡面的標記字元轉成不可編輯的 placeholder 灰字方塊
+    var delta = quillModal.getContents();
+    var newOps = [];
+    var markerRegex = new RegExp(PLACEHOLDER_MARK_OPEN + '(\\w+)' + PLACEHOLDER_MARK_CLOSE, 'g');
+
+    delta.ops.forEach(function (op) {
+        if (typeof op.insert !== 'string' || op.insert.indexOf(PLACEHOLDER_MARK_OPEN) === -1) {
+            newOps.push(op);
+            return;
+        }
+        var text = op.insert;
+        var lastIndex = 0;
+        var match;
+        markerRegex.lastIndex = 0;
+        while ((match = markerRegex.exec(text)) !== null) {
+            if (match.index > lastIndex) {
+                newOps.push({ insert: text.slice(lastIndex, match.index), attributes: op.attributes });
+            }
+            newOps.push({ insert: { placeholder: match[1] } });
+            lastIndex = markerRegex.lastIndex;
+        }
+        if (lastIndex < text.length) {
+            newOps.push({ insert: text.slice(lastIndex), attributes: op.attributes });
         }
     });
-    quillModal.setContents(delta);
+
+    quillModal.setContents({ ops: newOps });
 }
 
 function getEditorHtmlWithPlaceholders() {
-    var delta = quillModal.getContents();
-    var html = '';
-    delta.ops.forEach(function (op) {
-        if (typeof op.insert === 'string') {
-            html += op.insert.replace(/\n/g, '<br>');
-        } else if (op.insert && op.insert.placeholder) {
-            html += '[[' + op.insert.placeholder + ']]';
-        }
+    // 直接拿 Quill 渲染出來的「真正 HTML」（含 <p> <strong> <br> 等標籤），
+    // 而不是只處理純文字加換行，這樣粗體/清單等格式才不會遺失
+    var html = quillModal.root.innerHTML;
+
+    // 把裡面的灰字方塊（placeholder embed）換回 [[key]] 純文字標記
+    var temp = document.createElement('div');
+    temp.innerHTML = html;
+    temp.querySelectorAll('.locked-chip').forEach(function (el) {
+        el.replaceWith('[[' + el.getAttribute('data-key') + ']]');
     });
-    return html;
+    return temp.innerHTML;
 }
