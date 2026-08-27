@@ -260,44 +260,75 @@ Quill.register(PlaceholderBlot);
 var PLACEHOLDER_MARK_OPEN = '\uE000';
 var PLACEHOLDER_MARK_CLOSE = '\uE001';
 
+// 自己手動解析 HTML 轉成 Quill Delta，避開 Quill clipboard 內部的 appendChild bug
+function htmlToPlaceholderDelta(html) {
+    var container = document.createElement('div');
+    container.innerHTML = html || '';
+
+    var ops = [];
+
+    function pushText(text, attrs) {
+        if (!text) return;
+        var regex = new RegExp(PLACEHOLDER_MARK_OPEN + '(\\w+)' + PLACEHOLDER_MARK_CLOSE, 'g');
+        var lastIndex = 0;
+        var match;
+        while ((match = regex.exec(text)) !== null) {
+            if (match.index > lastIndex) {
+                var seg = text.slice(lastIndex, match.index);
+                ops.push(attrs && Object.keys(attrs).length ? { insert: seg, attributes: attrs } : { insert: seg });
+            }
+            ops.push({ insert: { placeholder: match[1] } });
+            lastIndex = regex.lastIndex;
+        }
+        if (lastIndex < text.length) {
+            var rest = text.slice(lastIndex);
+            ops.push(attrs && Object.keys(attrs).length ? { insert: rest, attributes: attrs } : { insert: rest });
+        }
+    }
+
+    function walk(node, attrs) {
+        node.childNodes.forEach(function (child) {
+            if (child.nodeType === Node.TEXT_NODE) {
+                pushText(child.textContent, attrs);
+            } else if (child.nodeType === Node.ELEMENT_NODE) {
+                var tag = child.tagName.toLowerCase();
+                if (tag === 'br') {
+                    ops.push({ insert: '\n' });
+                    return;
+                }
+                var childAttrs = Object.assign({}, attrs);
+                if (tag === 'strong' || tag === 'b') childAttrs.bold = true;
+                if (tag === 'em' || tag === 'i') childAttrs.italic = true;
+                if (tag === 'u') childAttrs.underline = true;
+
+                walk(child, childAttrs);
+
+                if (tag === 'p' || tag === 'div') {
+                    var lastOp = ops[ops.length - 1];
+                    if (!lastOp || typeof lastOp.insert !== 'string' || lastOp.insert.slice(-1) !== '\n') {
+                        ops.push({ insert: '\n' });
+                    }
+                }
+            }
+        });
+    }
+
+    walk(container, {});
+
+    var last = ops[ops.length - 1];
+    if (!last || typeof last.insert !== 'string' || last.insert.slice(-1) !== '\n') {
+        ops.push({ insert: '\n' });
+    }
+
+    return { ops: ops };
+}
+
 function setEditorWithLockedPlaceholders(html) {
-    // 先把 [[key]] 換成不會被 HTML parser 破壞的特殊標記字元
     var marked = (html || '').replace(/\[\[(\w+)\]\]/g, function (m, key) {
         return PLACEHOLDER_MARK_OPEN + key + PLACEHOLDER_MARK_CLOSE;
     });
-
-    // 用 Quill 的 clipboard 功能「真的」把 HTML 解析進編輯器，
-    // 會正確產生 <p> <strong> <br> 等對應的排版格式，不再當純文字塞進去
-    quillModal.setText('');
-    quillModal.clipboard.dangerouslyPasteHTML(0, marked);
-
-    // 貼上後，把裡面的標記字元轉成不可編輯的 placeholder 灰字方塊
-    var delta = quillModal.getContents();
-    var newOps = [];
-    var markerRegex = new RegExp(PLACEHOLDER_MARK_OPEN + '(\\w+)' + PLACEHOLDER_MARK_CLOSE, 'g');
-
-    delta.ops.forEach(function (op) {
-        if (typeof op.insert !== 'string' || op.insert.indexOf(PLACEHOLDER_MARK_OPEN) === -1) {
-            newOps.push(op);
-            return;
-        }
-        var text = op.insert;
-        var lastIndex = 0;
-        var match;
-        markerRegex.lastIndex = 0;
-        while ((match = markerRegex.exec(text)) !== null) {
-            if (match.index > lastIndex) {
-                newOps.push({ insert: text.slice(lastIndex, match.index), attributes: op.attributes });
-            }
-            newOps.push({ insert: { placeholder: match[1] } });
-            lastIndex = markerRegex.lastIndex;
-        }
-        if (lastIndex < text.length) {
-            newOps.push({ insert: text.slice(lastIndex), attributes: op.attributes });
-        }
-    });
-
-    quillModal.setContents({ ops: newOps });
+    var delta = htmlToPlaceholderDelta(marked);
+    quillModal.setContents(delta);
 }
 
 function getEditorHtmlWithPlaceholders() {
