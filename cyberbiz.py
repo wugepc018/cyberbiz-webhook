@@ -1263,8 +1263,13 @@ def get_email_template(PlanCode):
 
 EMAIL_SHELL_HEADER = """
 <html>
-<body style="margin:0; padding:0;">
-<div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.8; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+<body style="margin:0; padding:0; background:#f4f4f4;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;">
+<tr>
+<td align="center" style="padding:20px 0;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px; max-width:600px; background:#ffffff;">
+<tr>
+<td style="padding:20px; font-family: Arial, sans-serif; font-size:14px; line-height:1.8; color:#333;">
 """
 
 EMAIL_SHELL_FOOTER = """
@@ -1311,7 +1316,7 @@ def render_email(PlanCode, product_name, count, qrcode_html_blocks):
         # 沒放標記的舊樣板，QR code 自動補在最後面，避免漏掉
         body_content += f"<p>{qrcode_html_blocks}</p>"
 
-    body_html = EMAIL_SHELL_HEADER + body_content + "</div></body></html>"
+    body_html = EMAIL_SHELL_HEADER + body_content + "</td></tr></table></td></tr></table></body></html>"
     return subject, body_html
 
 
