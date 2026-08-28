@@ -156,8 +156,8 @@ function saveModal() {
             document.getElementById('modalPlanCodeError').innerText = '請輸入 PlanCode';
             return;
         }
-        if (!/^[A-Za-z0-9_\-]+$/.test(pc)) {
-            document.getElementById('modalPlanCodeError').innerText = 'PlanCode 只能包含英數字、底線、連字號';
+        if (!/^[A-Za-z0-9_\- ]+$/.test(pc)) {
+            document.getElementById('modalPlanCodeError').innerText = 'PlanCode 只能包含英數字、底線、連字號、空格';
             return;
         }
         if (window.TEMPLATES && window.TEMPLATES[pc]) {
