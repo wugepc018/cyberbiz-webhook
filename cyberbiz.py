@@ -681,7 +681,7 @@ def JOYTEL_order_esim(order_id, planCode, email, trans_id, order_id_for_close_cy
     }
     headers = {"Content-Type": "application/json"}
     try:
-        response = requests.post(JOYTEL_SUBSCRIBE_API, json=payload, headers=headers, timeout=60)
+        response = requests.post(JOYTEL_SUBSCRIBE_API, json=payload, headers=headers, timeout=100)
 
         if response.json().get("code") == 0:
             logging.info(f"訂購請求成功 order_id={order_id} planCode={planCode} trans_id={trans_id}")
@@ -699,12 +699,13 @@ def JOYTEL_order_esim(order_id, planCode, email, trans_id, order_id_for_close_cy
             t.start()
 
         else:
+            error_msg = f"code={response.json().get('code')}: {response.text}"[:200]
             logging.error(f"供應商回應失敗 code={response.json().get('code')} 內容={response.text}")
             with sqlite3.connect(DB_PATH, timeout=30) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "UPDATE orders SET status = 'pending' WHERE Trans_id = ?",
-                    (trans_id,)
+                    "UPDATE orders SET status = 'pending', NOTE = ?, JOYTEL_orderTid = ? WHERE Trans_id = ?",
+                    (error_msg, orderTid, trans_id)
                 )
                 conn.commit()
 
@@ -721,8 +722,8 @@ def JOYTEL_order_esim(order_id, planCode, email, trans_id, order_id_for_close_cy
             with sqlite3.connect(DB_PATH, timeout=30) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "UPDATE orders SET status='Failed', NOTE='timeout after retries' WHERE Trans_id=?",
-                    (trans_id,)
+                    "UPDATE orders SET status='Failed', NOTE='timeout after retries', JOYTEL_orderTid=? WHERE Trans_id=?",
+                    (orderTid, trans_id)
                 )
                 conn.commit()
 
@@ -2033,6 +2034,82 @@ def retry_poll_joytel(trans_id):
         "note": "此操作只查詢現有訂單狀態，不會重新下單"
     })
     
+@app.route("/scheduled_check_stuck_orders")
+def scheduled_check_stuck_orders():
+    """
+    排程用：檢查卡住太久的訂單。
+    - pending 超過 60 分鐘：安全，呼叫既有的 /retry 端點重新觸發下單
+    - processing 超過 3 小時：
+        - AUTO002 (FTC)：呼叫 /retry_poll 接續查詢（不重新下單）
+        - AUTO003 (JOYTEL) 且有 orderCode/orderTid：呼叫 /retry_poll_joytel 接續查詢（不重新下單）
+        - 其他情況：只記錄下來讓人工介入，避免重複下單風險
+    """
+    now = datetime.datetime.now()
+    pending_cutoff = (now - datetime.timedelta(minutes=60)).strftime("%Y-%m-%dT%H:%M:%S")
+    processing_cutoff = (now - datetime.timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M:%S")
+
+    retried_pending = []
+    retried_ftc_poll = []
+    retried_joytel_poll = []
+    stuck_processing = []
+
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT Trans_id FROM orders
+            WHERE status = 'pending' AND Created_AT < ?
+        """, (pending_cutoff,))
+        pending_trans_ids = [r[0] for r in cursor.fetchall()]
+
+        cursor.execute("""
+            SELECT Trans_id, qc, JOYTEL_orderCode, JOYTEL_orderTid, NOTE
+            FROM orders
+            WHERE status = 'processing' AND Created_AT < ?
+        """, (processing_cutoff,))
+        processing_rows = cursor.fetchall()
+
+    # pending 太久 → 呼叫既有 /retry
+    for trans_id in pending_trans_ids:
+        logging.warning(f"[排程] 訂單 {trans_id} 卡在 pending 超過60分鐘，呼叫 /retry 重新觸發")
+        try:
+            requests.get(f"https://wuge-rsp.com.tw/retry/{trans_id}", timeout=10)
+            retried_pending.append(trans_id)
+        except Exception as e:
+            logging.error(f"[排程] 呼叫 /retry/{trans_id} 失敗: {e}")
+
+    # processing 太久
+    for trans_id, qc, orderCode, orderTid, note in processing_rows:
+        if qc == "AUTO002":
+            # FTC → 接續查詢，不重新下單
+            logging.warning(f"[排程] 訂單 {trans_id} (FTC) 卡在 processing 超過3小時，呼叫 /retry_poll 接續查詢")
+            try:
+                requests.get(f"https://wuge-rsp.com.tw/retry_poll/{trans_id}", timeout=10)
+                retried_ftc_poll.append(trans_id)
+            except Exception as e:
+                logging.error(f"[排程] 呼叫 /retry_poll/{trans_id} 失敗: {e}")
+
+        elif qc == "AUTO003" and orderCode and orderTid:
+            # JOYTEL 且有訂單編號 → 接續查詢，不重新下單
+            logging.warning(f"[排程] 訂單 {trans_id} (JOYTEL) 卡在 processing 超過3小時，呼叫 /retry_poll_joytel 接續查詢")
+            try:
+                requests.get(f"https://wuge-rsp.com.tw/retry_poll_joytel/{trans_id}", timeout=10)
+                retried_joytel_poll.append(trans_id)
+            except Exception as e:
+                logging.error(f"[排程] 呼叫 /retry_poll_joytel/{trans_id} 失敗: {e}")
+
+        else:
+            # 其他供應商，或 JOYTEL 但缺 orderCode/orderTid → 只記錄，人工介入
+            logging.warning(f"[排程] 訂單 {trans_id} 卡在 processing 超過3小時，qc={qc} orderCode={orderCode} orderTid={orderTid}，需人工檢查")
+            stuck_processing.append({"trans_id": trans_id, "qc": qc, "orderCode": orderCode, "orderTid": orderTid, "note": note})
+
+    return jsonify({
+        "status": "ok",
+        "retried_pending": retried_pending,
+        "retried_ftc_poll": retried_ftc_poll,
+        "retried_joytel_poll": retried_joytel_poll,
+        "stuck_processing_needs_manual_check": stuck_processing
+    })
 # 手動查一次 AUTO002(FTC) 的 esim 資訊，不啟動長輪詢、不寫資料庫，純粹看供應商目前回什麼
 @app.route("/manual_query_ftc/<trans_id>")
 def manual_query_ftc(trans_id):
