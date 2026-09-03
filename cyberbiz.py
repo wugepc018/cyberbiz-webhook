@@ -2058,7 +2058,7 @@ def scheduled_check_stuck_orders():
 
         cursor.execute("""
             SELECT Trans_id FROM orders
-            WHERE status = 'pending' AND Created_AT < ?
+            WHERE status = 'pending' AND Created_AT < ? AND qc != 'AUTO005'
         """, (pending_cutoff,))
         pending_trans_ids = [r[0] for r in cursor.fetchall()]
 
