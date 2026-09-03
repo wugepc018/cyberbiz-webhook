@@ -406,6 +406,10 @@ def Diysim_order_esim(order_id, planCode, email, trans_id, order_id_for_close_cy
             "UPDATE orders SET status = 'processing' WHERE Trans_id = ? AND status IN ('pending', 'Failed')",
             (trans_id,)
         )
+        if cursor.rowcount == 0:
+            logging.info(f"trans_id={trans_id} 已經在 processing/completed，跳過重複送出")
+            conn.commit()
+            return
         conn.commit()
 
     payload = {"productCode": planCode, "customerEmail": email}
@@ -1947,23 +1951,40 @@ def download_report():
 def retry(trans_id):
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT order_id_for_close_cyberbiz, qc, order_id, PlanCode, email FROM orders WHERE Trans_id=?", (trans_id,))
+        cursor.execute(
+            "SELECT order_id_for_close_cyberbiz, qc, order_id, PlanCode, email, status, JOYTEL_orderTid FROM orders WHERE Trans_id=?",
+            (trans_id,)
+        )
         row = cursor.fetchone()
         if not row:
             return jsonify({"error": "找不到訂單"})
+        close_id, qc, order_id, plan_code, email, current_status, existing_joytel_orderTid = row
+
+        # AUTO003(JOYTEL) 若已經在 processing，代表已經跟供應商下過單、有 orderCode 在等 callback
+        # 這時候用 /retry 會清空狀態重新下單，導致對供應商重複下單，一律擋下改走 /retry_poll_joytel
+        if qc == "AUTO003" and current_status == "processing":
+            return jsonify({
+                "error": "此 AUTO003 訂單目前為 processing，已對供應商下過單，用 /retry 會導致重複下單",
+                "suggestion": f"請改用 /retry_poll_joytel/{trans_id} 接續查詢現有訂單狀態，不會重新下單"
+            })
+
         cursor.execute(
             "UPDATE orders SET status = 'pending' WHERE Trans_id = ? AND status != 'completed'",
             (trans_id,)
         )
         conn.commit()
-    close_id, qc, order_id, plan_code, email = row
 
     if qc == "AUTO001":
         t = threading.Thread(target=order_esim, args=(order_id, plan_code, email, trans_id, close_id))
     elif qc == "AUTO002":
         t = threading.Thread(target=FTC_order_esim, args=(order_id, plan_code, email, trans_id, close_id))
     elif qc == "AUTO003":
-        t = threading.Thread(target=JOYTEL_order_esim, args=(order_id, plan_code, email, trans_id, close_id))
+        # 若之前已經送出過、有記錄 orderTid，沿用同一組，交給供應商用 orderTid 判斷是否重複
+        # 只有從未送出過(orderTid 為 None)才讓函式自動產生新的一組
+        t = threading.Thread(
+            target=JOYTEL_order_esim,
+            args=(order_id, plan_code, email, trans_id, close_id, 0, existing_joytel_orderTid)
+        )
     elif qc == "AUTO004":
         t = threading.Thread(target=Diysim_order_esim, args=(order_id, plan_code, email, trans_id, close_id))
     elif qc == "AUTO005":
@@ -2058,14 +2079,14 @@ def scheduled_check_stuck_orders():
 
         cursor.execute("""
             SELECT Trans_id FROM orders
-            WHERE status = 'pending' AND Created_AT < ? AND qc != 'AUTO005'
+            WHERE status = 'pending' AND Created_AT < ? AND qc = 'AUTO003'
         """, (pending_cutoff,))
         pending_trans_ids = [r[0] for r in cursor.fetchall()]
 
         cursor.execute("""
             SELECT Trans_id, qc, JOYTEL_orderCode, JOYTEL_orderTid, NOTE
             FROM orders
-            WHERE status = 'processing' AND Created_AT < ?
+            WHERE status = 'processing' AND Created_AT < ? AND qc = 'AUTO003'
         """, (processing_cutoff,))
         processing_rows = cursor.fetchall()
 
