@@ -2073,7 +2073,7 @@ def scheduled_check_stuck_orders():
     for trans_id in pending_trans_ids:
         logging.warning(f"[排程] 訂單 {trans_id} 卡在 pending 超過60分鐘，呼叫 /retry 重新觸發")
         try:
-            requests.get(f"https://wuge-rsp.com.tw/retry/{trans_id}", timeout=10)
+            requests.get(f"{request.host_url.rstrip('/')}/retry/{trans_id}", timeout=10)
             retried_pending.append(trans_id)
         except Exception as e:
             logging.error(f"[排程] 呼叫 /retry/{trans_id} 失敗: {e}")
@@ -2084,7 +2084,7 @@ def scheduled_check_stuck_orders():
             # FTC → 接續查詢，不重新下單
             logging.warning(f"[排程] 訂單 {trans_id} (FTC) 卡在 processing 超過3小時，呼叫 /retry_poll 接續查詢")
             try:
-                requests.get(f"https://wuge-rsp.com.tw/retry_poll/{trans_id}", timeout=10)
+                requests.get(f"{request.host_url.rstrip('/')}/retry_poll/{trans_id}", timeout=10)
                 retried_ftc_poll.append(trans_id)
             except Exception as e:
                 logging.error(f"[排程] 呼叫 /retry_poll/{trans_id} 失敗: {e}")
@@ -2093,7 +2093,7 @@ def scheduled_check_stuck_orders():
             # JOYTEL 且有訂單編號 → 接續查詢，不重新下單
             logging.warning(f"[排程] 訂單 {trans_id} (JOYTEL) 卡在 processing 超過3小時，呼叫 /retry_poll_joytel 接續查詢")
             try:
-                requests.get(f"https://wuge-rsp.com.tw/retry_poll_joytel/{trans_id}", timeout=10)
+                requests.get(f"{request.host_url.rstrip('/')}/retry_poll_joytel/{trans_id}", timeout=10)
                 retried_joytel_poll.append(trans_id)
             except Exception as e:
                 logging.error(f"[排程] 呼叫 /retry_poll_joytel/{trans_id} 失敗: {e}")
