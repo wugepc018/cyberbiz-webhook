@@ -270,6 +270,12 @@
                                     onclick="copyTemplate('{{ t.plan_code }}')">
                                 <i data-lucide="copy"></i>
                             </button>
+                            {% if t.plan_code != 'default' %}
+                                <button type="button" class="icon-btn" title="刪除"
+                                        onclick="deleteTemplate('{{ t.plan_code }}')">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                                {% endif %}
                         </span>
                     </td>
                 </tr>
@@ -310,6 +316,21 @@
                     </div>
                 </div><!-- /.modal-box -->
             </div><!-- /.modal-overlay -->
+            <!-- 刪除確認 Modal -->
+            <div class="modal-overlay" id="deleteConfirmOverlay">
+                <div class="modal-box" style="max-width: 420px;">
+                    <h3>刪除樣板</h3>
+                    <p style="margin: 16px 0; color: #555; line-height: 1.6;">
+                        確定要刪除樣板「<strong id="deleteConfirmPlanCode"></strong>」嗎？<br>
+                        此操作無法復原。
+                    </p>
+                    <p id="deleteConfirmError" class="field-error"></p>
+                    <div class="modal-actions">
+                        <button onclick="confirmDeleteTemplate()" style="background:#d33;">確定刪除</button>
+                        <button class="cancel" onclick="closeDeleteConfirm()">取消</button>
+                    </div>
+                </div>
+            </div>
 
             </div><!-- /.card (樣板) -->
 

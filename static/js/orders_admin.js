@@ -206,6 +206,7 @@ function saveModal() {
                     '<button type="button" class="icon-btn" title="編輯" onclick="openModal(\'' + pc + '\')"><i data-lucide="pencil"></i></button>' +
                     '<a href="/admin/templates/preview/' + pc + '" target="_blank" class="icon-btn" title="預覽"><i data-lucide="eye"></i></a>' +
                     '<button type="button" class="icon-btn" title="複製" onclick="copyTemplate(\'' + pc + '\')"><i data-lucide="copy"></i></button>' +
+                    '<button type="button" class="icon-btn" title="刪除" onclick="deleteTemplate(\'' + pc + '\')"><i data-lucide="trash-2"></i></button>' +
                     '</span>' +
                     '</td>';
                 table.appendChild(tr);
@@ -287,4 +288,47 @@ function getEditorHtmlWithPlaceholders() {
         el.replaceWith('[[' + el.getAttribute('data-key') + ']]');
     });
     return temp.innerHTML;
+}
+// ---------- 刪除樣板：先跳出自訂確認 modal，按下確定後才真正呼叫刪除 API ----------
+var pendingDeletePlanCode = null;
+
+function deleteTemplate(pc) {
+    pendingDeletePlanCode = pc;
+    document.getElementById('deleteConfirmPlanCode').innerText = pc;
+    document.getElementById('deleteConfirmError').innerText = '';
+    document.getElementById('deleteConfirmOverlay').classList.add('show');
+}
+
+function closeDeleteConfirm() {
+    document.getElementById('deleteConfirmOverlay').classList.remove('show');
+    pendingDeletePlanCode = null;
+}
+
+function confirmDeleteTemplate() {
+    var pc = pendingDeletePlanCode;
+    if (!pc) return;
+
+    fetch('/admin/templates/api/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ PlanCode: pc })
+    })
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+        if (data.success) {
+            var row = document.getElementById('row-' + pc);
+            if (row) {
+                row.remove();
+            }
+            if (window.TEMPLATES) {
+                delete window.TEMPLATES[pc];
+            }
+            closeDeleteConfirm();
+        } else {
+            document.getElementById('deleteConfirmError').innerText = data.message || '刪除失敗';
+        }
+    })
+    .catch(function (err) {
+        document.getElementById('deleteConfirmError').innerText = '網路錯誤：' + err;
+    });
 }

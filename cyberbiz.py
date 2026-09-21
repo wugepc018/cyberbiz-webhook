@@ -412,7 +412,7 @@ def Diysim_order_esim(order_id, planCode, email, trans_id, order_id_for_close_cy
             return
         conn.commit()
 
-    payload = {"productCode": planCode, "customerEmail": email}
+    payload = {"productCode": planCode, "customerEmail": "wuge.esim@wuge.com.tw"}
     request_body = json.dumps(payload, separators=(',', ':'))
     raw = timestamp + request_id + request_body + VENDOR4_AccessSecret
     signature = hashlib.sha256(raw.encode()).hexdigest()
@@ -680,7 +680,7 @@ def JOYTEL_order_esim(order_id, planCode, email, trans_id, order_id_for_close_cy
         "phone": mobile_number,
         "timestamp": timestamp,
         "autoGraph": autoGraph,
-        "email": "wuge.esim@gmail.com",
+        "email": "wuge.esim@wuge.com.tw",
         "itemList": [{"productCode": planCode, "quantity": 1}]
     }
     headers = {"Content-Type": "application/json"}
@@ -964,6 +964,56 @@ def notify_esim():
     return jsonify({"code": "000", "mesg": "success"})
 
 
+def query_diysim_order(cid=None, businessSn=None):
+    """
+    查詢 Diysim 訂單狀態，成功且完成時回傳 (lpa, orderId)，否則回傳 None
+    """
+    Diysim_request_API = f"{Base_Diysim_URL}/api/order/list"
+    timestamp = str(int(time.time() * 1000))
+    payload = {}
+    if cid:
+        payload["iccid"] = cid
+    if businessSn:
+        payload["businessSn"] = businessSn
+    request_id = str(uuid.uuid4()).replace("-", "")[:20]
+    request_body = json.dumps(payload, separators=(',', ':'))
+    raw = timestamp + request_id + request_body + VENDOR4_AccessSecret
+    signature = hashlib.sha256(raw.encode()).hexdigest()
+    logging.info(f"VENDOR4_Access_Key: {VENDOR4_Access_Key}")
+    logging.info(f"VENDOR4_AccessSecret 長度: {len(VENDOR4_AccessSecret) if VENDOR4_AccessSecret else 'None'}")
+    headers = {
+        "Access-Key": VENDOR4_Access_Key,
+        "Signature": signature,
+        "Request-Id": request_id,
+        "Timestamp": timestamp,
+        "Content-Type": "application/json",
+    }
+    try:
+        response = requests.post(Diysim_request_API, data=request_body, headers=headers, timeout=60)
+        result = response.json()
+        logging.info(f"Diysim list 查詢回應: {response.text}")
+        if result.get("code") != 0:
+            logging.warning(f"Diysim list 查詢失敗 code={result.get('code')} msg={result.get('msg')}")
+            return None
+        data_list = result.get("data") or []
+        if not data_list:
+            logging.info(f"Diysim list 查無資料 businessSn={businessSn}")
+            return None
+        item = data_list[0]
+        status = item.get("status")
+        lpa = item.get("lpa")
+        orderId = item.get("orderId")
+
+        if status == 4 and lpa:
+            return lpa, orderId
+        else:
+            logging.info(f"Diysim 訂單 orderId={orderId} 狀態尚未完成 status={status}")
+            return None
+
+    except Exception as e:
+        logging.error(f"呼叫 Diysim list API 失敗: {e}")
+        return None
+
 # 接收Diysim供應商傳來的esim資訊
 @app.route("/notify_api/Diysim_esim/plan/subscribe", methods=["POST"])
 def Diysim_notify_esim():
@@ -981,31 +1031,47 @@ def Diysim_notify_esim():
 
     logging.info(f"CID: {cid}")
     logging.info(f"businessSn: {businessSn}")
+    result = None
+    for attempt in range(3):
+        result = query_diysim_order(businessSn=businessSn)
+        if result:
+            break
+        logging.info(f"第{attempt+1}次查詢 lpa 尚未就緒 businessSn={businessSn}，5秒後重試")
+        time.sleep(5)
+    if not result:
+        logging.error(f"webhook 收到通知但查詢 lpa 多次仍失敗 businessSn={businessSn}，需人工檢查")
+        return jsonify({"code": "999", "mesg": "lpa not ready, needs manual check"})
+    lpa, orderId = result
+    qrcode_img = generate_qrcode(lpa)
+    
 
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
         cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE orders SET status='completed', qrcode=? WHERE BUSINESSN=? AND status='processing'",
+            (qrcode_img, businessSn)
+        )
+        if cursor.rowcount == 0:
+            logging.info(f"businessSn={businessSn} 已被輪詢或其他流程完成，webhook 略過")
+            conn.commit()
+            return jsonify({"code": "0", "mesg": "Already completed"})
+        
         cursor.execute("""
             SELECT email, Title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id, Trans_id, PlanCode
             FROM orders
-            WHERE BUSINESSN = ? AND status = 'processing'
+            WHERE BUSINESSN = ?
         """, (businessSn,))
 
         row = cursor.fetchone()
 
         if not row:
             logging.error(f"找不到 BUSINESSN={businessSn} 對應的訂單")
+            conn.commit()
             return jsonify({"code": "999", "mesg": "Failed"})
 
         email, full_title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id, trans_id, PlanCode = row
 
-        cursor.execute(
-            "UPDATE orders SET status='completed' WHERE BUSINESSN=?",
-            (businessSn,)
-        )
-        cursor.execute(
-            "INSERT INTO CID_TABLE (CID, Trans_id) VALUES (?, ?)", (cid, trans_id)
-        )
-
+        cursor.execute("INSERT INTO CID_TABLE (CID, Trans_id) VALUES (?, ?)", (cid, trans_id))
         conn.commit()
 
         cursor.execute("""
@@ -1015,10 +1081,26 @@ def Diysim_notify_esim():
 
         remaining_in_item = cursor.fetchone()[0]
         if remaining_in_item == 0:
-            logging.info(f"Diysim 訂購完成 order_id={order_id} trans_id={trans_id}")
-            check_and_close_order(order_id, order_id_for_close_cyberbiz)
+            cursor.execute("""SELECT qrcode, Trans_id FROM orders
+                WHERE order_id = ? AND line_items_id = ?
+                ORDER BY qty_index ASC
+            """, (order_id, line_items_id))
+            qrcode_rows = cursor.fetchall()
+            qrcode_list = [r[0] for r in qrcode_rows]
+            trans_id_list = [r[1] for r in qrcode_rows]
+
+            cid_list = []
+            for tid in trans_id_list:
+                cursor.execute("SELECT CID FROM CID_TABLE WHERE Trans_id = ?", (tid,))
+                cid_row = cursor.fetchone()
+                cid_list.append(cid_row[0] if cid_row else None)
+
+            logging.info(f"line_items_id={line_items_id} 全部完成，寄送含 {len(qrcode_list)} 張 QR code 的信")
+            send_order_email(email, qrcode_list, full_title, PlanCode=PlanCode, cid_list=cid_list) 
         else:
             logging.info(f"line_items_id={line_items_id} 尚有 {remaining_in_item} 筆未完成，等待中")
+        logging.info(f"Diysim 訂購完成 order_id={order_id} trans_id={trans_id}")
+        check_and_close_order(order_id, order_id_for_close_cyberbiz)
     return jsonify({"code": "0", "mesg": "Success"})
 
 def wugelinebot_order_esim(order_id, planCode, email, trans_id, order_id_for_close_cyberbiz):
@@ -1952,13 +2034,13 @@ def retry(trans_id):
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT order_id_for_close_cyberbiz, qc, order_id, PlanCode, email, status, JOYTEL_orderTid FROM orders WHERE Trans_id=?",
+            "SELECT order_id_for_close_cyberbiz, qc, order_id, PlanCode, email, status, JOYTEL_orderTid, BUSINESSN FROM orders WHERE Trans_id=?",
             (trans_id,)
         )
         row = cursor.fetchone()
         if not row:
             return jsonify({"error": "找不到訂單"})
-        close_id, qc, order_id, plan_code, email, current_status, existing_joytel_orderTid = row
+        close_id, qc, order_id, plan_code, email, current_status, existing_joytel_orderTid, businessSn = row
 
         # AUTO003(JOYTEL) 若已經在 processing，代表已經跟供應商下過單、有 orderCode 在等 callback
         # 這時候用 /retry 會清空狀態重新下單，導致對供應商重複下單，一律擋下改走 /retry_poll_joytel
@@ -1966,6 +2048,11 @@ def retry(trans_id):
             return jsonify({
                 "error": "此 AUTO003 訂單目前為 processing，已對供應商下過單，用 /retry 會導致重複下單",
                 "suggestion": f"請改用 /retry_poll_joytel/{trans_id} 接續查詢現有訂單狀態，不會重新下單"
+            })
+        if qc == "AUTO004" and current_status == "processing" and businessSn:
+            return jsonify({
+                "error": "此 AUTO004 訂單目前為 processing，已對供應商下過單，用 /retry 會導致重複下單",
+                "suggestion": f"請改用 /retry_poll_diysim/{trans_id} 接續查詢現有訂單狀態，不會重新下單"
             })
 
         cursor.execute(
@@ -2018,7 +2105,94 @@ def retry_poll(trans_id):
     t.start()
 
     return jsonify({"status": "ok", "message": f"已重新觸發 poll_lpa，trans_id={trans_id}"})
+@app.route("/retry_poll_diysim/<trans_id>")
+def retry_poll_diysim(trans_id):
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT qc, status, BUSINESSN, order_id_for_close_cyberbiz FROM orders WHERE Trans_id = ?",
+            (trans_id,)
+        )
+        row = cursor.fetchone()
 
+    if not row:
+        return jsonify({"error": "找不到這個 trans_id"})
+
+    qc, status, businessSn, close_id = row
+    if qc != "AUTO004":
+        return jsonify({"error": f"此訂單廠商為 {qc}，不是 AUTO004/Diysim"})
+    if status != "processing":
+        return jsonify({"error": f"目前狀態為 {status}，不是 processing，不需要查詢"})
+    if not businessSn:
+        return jsonify({"error": "找不到 businessSn，無法查詢"})
+
+    try:
+        result = query_diysim_order(businessSn=businessSn)
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"呼叫 Diysim API 失敗: {e}"})
+
+    if not result:
+        return jsonify({
+            "status": "not_ready",
+            "trans_id": trans_id,
+            "message": "供應商目前尚未回覆 lpa，稍後再查"
+        })
+
+    lpa, orderId = result
+    qrcode_img = generate_qrcode(lpa)
+
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "UPDATE orders SET status='completed', qrcode=? WHERE Trans_id=? AND status='processing'",
+            (qrcode_img, trans_id)
+        )
+        if cursor.rowcount == 0:
+            logging.info(f"trans_id={trans_id} 已被 webhook 或其他流程完成，略過")
+            conn.commit()
+            return jsonify({"status": "already_completed", "trans_id": trans_id})
+
+        cursor.execute(
+            "SELECT email, Title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id, PlanCode FROM orders WHERE Trans_id = ?",
+            (trans_id,)
+        )
+        row2 = cursor.fetchone()
+        email, full_title, order_id, qty_index, order_id_for_close_cyberbiz, line_items_id, PlanCode = row2
+
+        cursor.execute("INSERT INTO CID_TABLE (CID, Trans_id) VALUES (?, ?)", (orderId, trans_id))
+        conn.commit()
+
+        cursor.execute("""
+            SELECT COUNT(*) FROM orders
+            WHERE order_id = ? AND line_items_id = ? AND status != 'completed'
+        """, (order_id, line_items_id))
+        remaining_in_item = cursor.fetchone()[0]
+
+        if remaining_in_item == 0:
+            cursor.execute("""SELECT qrcode, Trans_id FROM orders
+                WHERE order_id = ? AND line_items_id = ?
+                ORDER BY qty_index ASC
+            """, (order_id, line_items_id))
+            qrcode_rows = cursor.fetchall()
+            qrcode_list = [r[0] for r in qrcode_rows]
+            trans_id_list = [r[1] for r in qrcode_rows]
+
+            cid_list = []
+            for tid in trans_id_list:
+                cursor.execute("SELECT CID FROM CID_TABLE WHERE Trans_id = ?", (tid,))
+                cid_row = cursor.fetchone()
+                cid_list.append(cid_row[0] if cid_row else None)
+
+            logging.info(f"line_items_id={line_items_id} 全部完成，寄送含 {len(qrcode_list)} 張 QR code 的信")
+            send_order_email(email, qrcode_list, full_title, PlanCode=PlanCode, cid_list=cid_list)
+        else:
+            logging.info(f"line_items_id={line_items_id} 尚有 {remaining_in_item} 筆未完成，等待中")
+
+        logging.info(f"Diysim 手動查詢補完成 order_id={order_id} trans_id={trans_id}")
+        check_and_close_order(order_id, order_id_for_close_cyberbiz)
+
+    return jsonify({"status": "ok", "message": f"trans_id={trans_id} 查詢成功並完成訂單"})
 @app.route("/retry_poll_joytel/<trans_id>")
 def retry_poll_joytel(trans_id):
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
@@ -2054,7 +2228,7 @@ def retry_poll_joytel(trans_id):
         "message": f"已重新觸發 JOYTEL 輪詢，trans_id={trans_id} orderCode={orderCode}",
         "note": "此操作只查詢現有訂單狀態，不會重新下單"
     })
-    
+
 @app.route("/scheduled_check_stuck_orders")
 def scheduled_check_stuck_orders():
     """
@@ -2179,7 +2353,27 @@ def manual_query_ftc(trans_id):
         "message": "供應商已回覆 esim 資訊，尚未寫入資料庫（僅查詢，未完成訂單）"
     })
 
+@app.route("/admin/templates/api/delete", methods=["POST"])
+def api_delete_template():
+    data = request.get_json(silent=True) or {}
+    PlanCode = (data.get("PlanCode") or "").strip()
 
+    if not PlanCode:
+        return jsonify({"success": False, "message": "PlanCode 不可為空"}), 400
+
+    if PlanCode == "default":
+        return jsonify({"success": False, "message": "default 樣板為系統預設 fallback，不可刪除"}), 400
+
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM email_templates WHERE PlanCode = ?", (PlanCode,))
+        deleted = cursor.rowcount
+        conn.commit()
+
+    if deleted == 0:
+        return jsonify({"success": False, "message": f"找不到 PlanCode={PlanCode} 的樣板"}), 404
+
+    return jsonify({"success": True, "message": f"已刪除樣板 PlanCode={PlanCode}"})
 @app.route("/favicon.png")
 def favicon():
     return send_file(os.path.join(BASE_DIR, "favicon.png"), mimetype="image/png")
